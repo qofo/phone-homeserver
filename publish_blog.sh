@@ -21,6 +21,7 @@ KEEP=3
 LOCAL=http://127.0.0.1:8080
 PAGES_URL=https://qofo.github.io/
 PAGES_BRANCH=gh-pages
+PAGES_CHANGED=0
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -106,6 +107,7 @@ build_pages() {
         say "[pages] $rev builds the same site as $PAGES_BRANCH $(git_src rev-parse --short "$parent"); no new commit"
         return
     fi
+    PAGES_CHANGED=1
     commit=$(git_src commit-tree "$tree" ${parent:+-p "$parent"} \
              -m "Build $rev: $(git_src log -1 --format=%s HEAD)" -m "Built from main with hugo --minify ($BUILT_POSTS posts).")
     git_src update-ref "refs/heads/$PAGES_BRANCH" "$commit"
@@ -118,8 +120,12 @@ push_both() {
     [ "$branch" = main ] || die "$SRC is on '$branch', not main"
     say "[push]  origin main $PAGES_BRANCH"
     git_src push --atomic origin main "$PAGES_BRANCH"
-    say "[pages] GitHub rebuilds $PAGES_URL from $PAGES_BRANCH in about a minute"
-    say "        check: gh api repos/qofo/qofo.github.io/pages/builds/latest --jq .status"
+    if [ "$PAGES_CHANGED" = 1 ]; then
+        say "[pages] GitHub rebuilds $PAGES_URL from $PAGES_BRANCH in about a minute"
+        say "        check: gh api repos/qofo/qofo.github.io/pages/builds/latest --jq .status"
+    else
+        say "[pages] site unchanged; $PAGES_URL keeps its current build"
+    fi
 }
 
 status() {
