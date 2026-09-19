@@ -14,8 +14,10 @@ Android 9
       ├─ start_services.sh      공개 서비스의 감독자 (블로그 + ngrok)
       │   ├─ serve_blog.py      Hugo로 빌드한 블로그 + 실시간 대시보드 API (:8080)
       │   └─ ngrok              고정 도메인으로 공개
-      └─ private_docs.sh        내부 문서 서버의 감독자 (별도)
-          └─ private_docs_server.py   Tailscale 안에서만 열리는 마크다운 뷰어 (:8081)
+      ├─ private_docs.sh        내부 문서 서버의 감독자 (별도)
+      │   └─ private_docs_server.py   Tailscale 안에서만 열리는 마크다운 뷰어 (:8081)
+      └─ code_server.sh         code-server의 감독자 (별도)
+          └─ code-server        Tailscale 안에서만 열리는 브라우저용 VS Code (:8443, HTTPS)
 ```
 
 블로그 글과 Hugo 사이트는 [`qofo/qofo.github.io`](https://github.com/qofo/qofo.github.io)에 있다. 같은 원본을 GitHub Pages와 이 폰이 각각 빌드해서 서비스하고, 대시보드 수치는 어느 쪽에서 열어도 폰의 `/api/metrics`에서 온다.
@@ -33,11 +35,12 @@ proot는 `--kill-on-exit`로 실행되므로 로그인 세션에서 띄운 프�
 | `private_docs_server.py` | Tailscale 전용 문서 뷰어. 허용 목록에 있는 마크다운만 서빙한다 |
 | `private_docs.sh` | 문서 서버 감독자. 같은 다섯 개 명령 |
 | `private_docs.list.example` | 문서 허용 목록의 예시 |
+| `code_server.sh` | code-server 감독자. Tailscale 주소 탐지, 이름 제약 개인 CA로 인증서 발급·갱신, 같은 다섯 개 명령 |
 | `private_docs_static/` | 뷰어의 정적 파일 (marked, DOMPurify 포함) |
 | `termux/` | Termux 쪽 런처. proot 바깥에서 감독자를 낳는다 |
 | `tests/test_private_docs.py` | 문서 서버의 블랙박스 보안 테스트 47개 |
 | `tests/test_serve_blog.py` | 블로그 서버의 블랙박스 테스트 35개 (경로 조작, 리디렉트, 캐시, CORS, 빌드 교체) |
-| `docs/` | 서버 환경 명세, 부하 시험 기록, Hugo 이전 계획 (IP는 예시 값으로 바꿈) |
+| `docs/` | 서버 환경 명세, code-server 사용 안내, 부하 시험 기록, Hugo 이전 계획 (IP는 예시 값으로 바꿈) |
 
 ## 설정
 
@@ -54,6 +57,7 @@ proot는 `--kill-on-exit`로 실행되므로 로그인 세션에서 띄운 프�
 ```bash
 ./start_services.sh status        # 공개 서비스
 ./private_docs.sh status          # 내부 문서 서버
+./code_server.sh status           # code-server
 python3 tests/test_private_docs.py
 python3 tests/test_serve_blog.py
 ./publish_blog.sh status          # 폰 사본과 Pages가 어느 커밋을 서비스하는지

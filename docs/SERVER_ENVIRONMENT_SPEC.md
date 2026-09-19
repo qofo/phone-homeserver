@@ -2,7 +2,7 @@
 # Server Environment Specification & Agent Handoff Guide
 
 > **최종 갱신일**: 2026년 9월 19일  
-> **문서 버전**: v2.3.0 (블로그를 Hugo로 전환, GitHub Pages와 동시 배포)  
+> **문서 버전**: v2.4.0 (Tailscale 전용 code-server 추가)  
 > **대상**: 이 환경에서 작업할 모든 후속 AI 에이전트 (Claude Code, Antigravity CLI 등)  
 > **핵심 키워드**: `Samsung Galaxy Note FE`, `Termux`, `PRoot-Distro`, `Ubuntu 26.04 LTS`, `aarch64`, `No-Systemd`, `Tailscale`, `ngrok`, `Supervisor`
 
@@ -199,6 +199,35 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/.private_docs.state`, `.private_docs.pid`, `.private_docs.lock` | 서버 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
 | `/root/.private_docs_disabled`, `.private_docs_restart` | `stop` 시 생성되는 자동 시작 중지 플래그, `restart` 플래그 |
 
+
+### code-server (브라우저용 VS Code, Tailscale 전용, 포트 8443)
+폰의 파일을 브라우저에서 VS Code로 편집하는 환경입니다. 사용 방법과 인증서 등록은 **`/root/CODE_SERVER_GUIDE.md`**(내부 문서 서버에도 있음)를 보십시오. 블로그·문서 서버와 **감시 데몬·런처·감시 작업을 모두 따로** 둡니다.
+
+* **왜 Remote-SSH가 아닌가**: VS Code Remote-SSH는 Termux의 sshd(8022)로 들어가는데, Termux는 bionic libc라 VS Code Server가 요구하는 glibc/libstdc++가 없습니다(`~/.vscode-server/.cli.*.log`: `does not meet Visual Studio Code Server's prerequisites`). code-server는 glibc가 있는 proot 우분투 안에서 돕니다.
+* **주소**: `https://100.x.y.z:8443/` (Tailscale에 연결된 기기에서만 열림, 비밀번호 로그인)
+* **설치**: `/root/.local/lib/code-server-4.137.0-linux-arm64` (심볼릭 링크 `/root/.local/lib/code-server`), GitHub 릴리스 SHA-256 검증 후 설치. 사용자 데이터·확장은 `/root/.local/share/code-server/`
+* **실행 경로**: Termux:Boot / 감시 작업 **4245**(15분) / `code_server.sh start`(작업 **4246**) → `/root/termux/ensure-code-server.sh` → `proot-distro login ubuntu -- /root/code_server.sh start-daemon` → `code-server --bind-addr <Tailscale IP>:8443 --cert … /root`
+* **감시 데몬**: 15초 주기, 90초 유예 후 `https://<IP>:8443/healthz`를 **우리 CA로 검증하며** 점검, 3회 실패 시 강제 재기동, 재시작 대기 15초→최대 5분, 재시작은 플래그 파일. Tailscale 주소는 감시 데몬이 직접 찾고(SIOCGIFADDR), 없으면 `waiting`, 바뀌면 인증서를 다시 발급해 재기동합니다.
+* **메모리**: 대기 중 약 150MB(래퍼 + 서버 두 프로세스). 브라우저가 붙으면 확장 호스트만큼 늘어납니다. 메모리가 필요하면 `code_server.sh stop`.
+
+| 방어 층 | 내용 |
+|:---|:---|
+| 바인딩 주소 | Tailscale IPv4에만 바인딩합니다. `127.0.0.1`·LAN으로는 연결이 거부되고, ngrok은 8080만 전달하므로 인터넷에 노출되지 않습니다. |
+| TLS | 폰에서 만든 개인 CA(`/root/.config/code-server/tls/ca.crt`, 2036년까지)가 서버 인증서(397일, 만료 30일 전 자동 갱신)를 발급합니다. CA에는 **이름 제약**(100.64.0.0/10, fd7a:115c:a1e0::/48, `ts.net`)이 걸려 있어 다른 사이트용 인증서는 검증에 실패합니다. |
+| 인증 | code-server 비밀번호(`/root/.config/code-server/config.yaml`, 권한 600). 로그인 시도는 분당 2회·시간당 12회로 제한됩니다. |
+| WebSocket | 로그인 없으면 401, 다른 출처(Origin)면 403입니다. |
+
+| 경로 | 역할 |
+|:---|:---|
+| `/root/code_server.sh` | 관리 명령 + 감시 데몬 (`start`/`stop`/`restart`/`status`) + 인증서 발급·갱신 |
+| `/root/termux/ensure-code-server.sh` | Termux 쪽 런처 |
+| `/root/.config/code-server/config.yaml` | 비밀번호 등 설정. **내용을 출력하지 말 것** |
+| `/root/.config/code-server/tls/` | `ca.key`·`server.key`(600, 비밀), `ca.crt`(사용자 기기에 등록), `server.crt` |
+| `/root/.local/share/code-server/User/settings.json` | inotify 한도(4096)에 맞춘 감시·검색 제외, 텔레메트리·자동 업데이트 끔 |
+| `/root/code_server.log` (KST + code-server 자체 로그) | 2MB 초과 시 `.1`로 순환 |
+| `/root/.code_server.state`, `.code_server.pid`, `.code_server.lock` | 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
+| `/root/.code_server_disabled`, `.code_server_restart` | 자동 시작 중지 플래그, `restart` 플래그 |
+
 ---
 
 ## ⚠️ 6. 후속 에이전트가 절대 피해야 할 실수 (Agent Don'ts & Gotchas)
@@ -221,7 +250,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
    - Termux `~/.termux_authinfo`
 9. ⚠️ **CA 인증서 문제**: TLS 인증서 오류가 나면 `apt-get install --reinstall ca-certificates`를 실행하십시오.
 10. ⚠️ **코드 수정 절차**: 수정 → `git -C /root diff`로 확인 → 커밋 → `start_services.sh restart` 순서를 지키십시오.
-11. ❌ **내부 문서 서버를 `0.0.0.0`에 바인딩하거나 `serve_blog.py`·`start_services.sh`에 합치지 말 것**
+11. ❌ **내부 문서 서버나 code-server를 `0.0.0.0`에 바인딩하거나, ngrok에 연결하거나, `serve_blog.py`·`start_services.sh`에 합치지 말 것** (code-server는 폰 전체의 셸입니다)
     - 8080은 ngrok으로 인터넷에 공개됩니다. 비공개 문서는 반드시 별도 프로세스가 Tailscale 주소(8081)에서만 제공해야 합니다.
     - 문서를 추가할 때는 `/root/private_docs.list`에 한 줄을 넣기만 하면 됩니다(블로그 저장소 `qofo.github.io`에 넣으면 공개됩니다).
 
@@ -270,7 +299,8 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | **유지보수로 끄기 / 다시 켜기** | `/root/start_services.sh stop` / `start` |
 | **로그 확인** | `tail -f /root/daemon.log /root/ngrok.log` |
 | **터널 공개 주소 확인** | `curl -s localhost:4040/api/tunnels` |
-| **감시 작업 확인** | `termux-job-scheduler --pending` (4241 = 블로그 감시, 4243 = 내부 문서 서버 감시, 둘 다 15분 주기) |
+| **감시 작업 확인** | `termux-job-scheduler --pending` (4241 = 블로그, 4243 = 내부 문서 서버, 4245 = code-server, 모두 15분 주기) |
+| **code-server 상태** | `/root/code_server.sh status` (주소: `https://100.x.y.z:8443/`, Tailscale 전용, 안내: `CODE_SERVER_GUIDE.md`) |
 | **내부 문서 서버 상태** | `/root/private_docs.sh status` (주소: `http://100.x.y.z:8081/`, Tailscale 전용) |
 | **내부 문서 추가/제외** | `/root/private_docs.list`에 파일 경로를 한 줄 추가/삭제 (재시작 불필요) |
 | **실제 CPU·가동 시간·부하** | `curl -s localhost:8080/api/metrics` |
