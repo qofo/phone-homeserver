@@ -3,13 +3,13 @@
 > **작성일**: 2026년 9월 18일  
 > **대상**: 이 서버에서 작업할 사람과 후속 AI 에이전트  
 > **전제 문서**: [`SERVER_ENVIRONMENT_SPEC.md`](SERVER_ENVIRONMENT_SPEC.md) (v2.0.0)  
-> **상태**: 폰 전환 완료 (2026-09-19). GitHub Pages 배포는 아래 "실행 결과" 참고
+> **상태**: 실행 완료 (2026-09-19). 폰과 `https://qofo.github.io/` 모두 Hugo 빌드를 서비스 중
 
 ---
 
 ## 실행 결과 (2026-09-19)
 
-폰 서버는 Hugo 빌드를 서비스하고 있습니다. 운영 방법은 `SERVER_ENVIRONMENT_SPEC.md` 5장(관련 파일)과 9장(치트시트)에 있습니다. 아래는 이 계획서와 **다르게 한 것**과 그 이유입니다.
+폰 서버와 GitHub Pages가 같은 커밋의 Hugo 빌드를 서비스하고 있습니다. 운영 방법은 `SERVER_ENVIRONMENT_SPEC.md` 5장(관련 파일)과 9장(치트시트)에 있습니다. 아래는 이 계획서와 **다르게 한 것**과 그 이유입니다.
 
 | 항목 | 계획 | 실제 | 이유 |
 |:---|:---|:---|:---|
@@ -18,11 +18,11 @@
 | 글 주소 | 영문 슬러그 | `/posts/<slug>/`, 파일은 `NN-<slug>.md` | 권장안 그대로 |
 | 글 사이 링크 | `relref` 단축코드 | `[2편](02-stdlib-python-blog.md)` + 링크 render hook | GitHub에서 파일을 읽을 때도 링크가 열림. 대상이 없으면 빌드 실패 |
 | 폰 빌드 위치 | `/root/site/public` | `/root/blog_builds/<시각>` + 심볼릭 링크 `/root/blog_public` | 빌드 도중의 반쯤 쓴 파일을 서비스하지 않도록 링크를 rename으로 교체 |
-| 배포 명령 | `start_services.sh publish` | `/root/publish_blog.sh` (`phone`/`publish`/`status`) | 실행 중인 감시 데몬 스크립트를 고치면 데몬을 껐다 켜야 함. 배포는 감시와 별개 |
+| 배포 명령 | `start_services.sh publish` | `/root/publish_blog.sh` (`phone`/`pages`/`publish`/`status`) | 실행 중인 감시 데몬 스크립트를 고치면 데몬을 껐다 켜야 함. 배포는 감시와 별개 |
 | 대시보드 CORS | `Access-Control-Allow-Origin: *`면 충분 | **OPTIONS preflight 응답을 추가** | `ngrok-skip-browser-warning`은 비표준 헤더라 브라우저가 preflight를 먼저 보냄. ngrok은 이를 통과시켰고 옛 서버는 **501**로 답했음(2026-09-19 실측). 7장의 curl 확인은 preflight를 보내지 않아서 이 문제를 놓쳤음 |
 | 폴링 주기 | 2초 | Pages 홈 30초·대시보드 5초, 폰 10초·3초. 탭이 숨으면 정지, 실패 시 최대 60초까지 간격 증가 | ngrok 무료 플랜은 요청 수를 셈 |
-| GitHub 인증 | 배포용 SSH 키 | 사용자가 설정한 `gh` 로그인과 HTTPS 자격 증명 | 이미 준비돼 있었음 |
-| Actions 버전 | checkout@v4 등 | checkout@v7, configure-pages@v6, upload-pages-artifact@v5, deploy-pages@v5 (2026-09-19 최신 메이저). Hugo 0.154.5는 체크섬 검증 후 설치 | — |
+| GitHub 인증 | 배포용 SSH 키 | 사용자가 설정한 HTTPS 자격 증명(classic 토큰, `repo` 권한) | 이미 준비돼 있었음 |
+| **Pages 빌드** | **GitHub Actions** | **폰에서 빌드해 `gh-pages` 브랜치로 push** (`publish_blog.sh publish`). Pages 소스는 `gh-pages` 브랜치 루트, `.nojekyll` 포함 | 토큰에 `workflow` 권한이 없어 워크플로 파일을 push할 수 없음. `gh` 로그인 토큰은 Pages 설정 변경이 403. 빌드는 1초 이내라 폰 부담이 없고, 두 사본이 같은 커밋·같은 Hugo 바이너리로 만들어짐. 대신 GitHub 웹에서 고친 글은 폰에서 `publish`해야 반영됨 |
 | `timeZone` | — | 넣지 않음 | 폰 Ubuntu에 tzdata가 없어 `Asia/Seoul`이면 폰 빌드가 실패함 |
 
 검증 (2026-09-19):
@@ -30,6 +30,8 @@
 - 폰 빌드를 크롤링해 내부 링크 89개 모두 200.
 - 브라우저 쪽(jsdom) 27/27: Pages에서의 교차 출처 요청과 헤더, ngrok 경고 HTML 수신 시 "응답 없음" 표시, 복구, 폰 빌드의 같은 출처 요청, 옛 `#post=` 링크 이동, 복사 버튼, 테마 전환. 이 시험은 `npm i jsdom`이 필요해 저장소에 넣지 않았음.
 - 전환 재시작 중단 12초. ngrok 주소에서 preflight 204, `/api/metrics` 200, 글·태그·RSS 200.
+- GitHub Pages: 소스를 `gh-pages`로 바꾼 뒤 빌드 요청(API)으로 첫 배포. 사이트를 크롤링해 내부 링크 89개 모두 200.
+- 소스 전환만으로는 Pages가 다시 빌드하지 않았음. 전환 전에 push한 `gh-pages`와 전환 뒤 push한 `main`은 둘 다 빌드를 일으키지 않아, `POST /repos/qofo/qofo.github.io/pages/builds`로 요청했음.
 - 옛 SPA로 돌아가려면: `git -C /root checkout pre-hugo -- serve_blog.py && /root/start_services.sh restart` (옛 SPA는 `/posts`를 읽음).
 
 ---

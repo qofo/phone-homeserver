@@ -148,7 +148,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | Termux `~/.bashrc` | Termux 로그인마다 런처 실행 (데몬이 있으면 아무것도 안 함) |
 | `/root/.bashrc` | 대화형 proot 로그인 시 `start_services.sh login-check` |
 | `/root/serve_blog.py` | `/root/blog_public`의 정적 파일(Hugo 빌드) + `/api/metrics`(CORS 허용, preflight 응답). 멀티스레드, 요청 타임아웃 30초. 빌드가 없으면 `/`에 200 안내 페이지 |
-| `/root/publish_blog.sh` | 폰용 Hugo 빌드와 교체(`phone`), 폰 빌드 + GitHub push(`publish`), 상태(`status`) |
+| `/root/publish_blog.sh` | 폰용 빌드와 교체(`phone`), Pages용 빌드를 로컬 `gh-pages`에 커밋(`pages`), 둘 다 빌드하고 `main`·`gh-pages`를 함께 push(`publish`), 상태(`status`) |
 | `/root/blog_public` → `/root/blog_builds/<UTC시각>` | 폰이 서비스하는 빌드. 심볼릭 링크를 rename으로 바꿔 무중단 교체, 최근 3개 보관 |
 | `/root/qofo.github.io/content/posts/*.md` | 블로그 글 원본 (현재 8편). `/posts`는 Hugo 전환 전 기록으로만 남아 있음 |
 | `/root/.start_services.pid`, `.start_services.lock` | 데몬 PID 파일과 단일 실행용 lock |
@@ -249,7 +249,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | 대상 | 방식 |
 |:---|:---|
 | `/root` | git 저장소. 허용 목록 `.gitignore`로 **서버 파일만 추적**하고, 자격 증명·캐시·에이전트 상태는 제외 |
-| `/root/qofo.github.io` | 블로그 원본 git 저장소. 원격 `github.com/qofo/qofo.github.io`(공개) |
+| `/root/qofo.github.io` | 블로그 git 저장소. 원격 `github.com/qofo/qofo.github.io`(공개). `main` = 원본, `gh-pages` = Pages가 서비스하는 빌드 결과(Pages 소스: `gh-pages` 브랜치 루트) |
 | `/posts` | Hugo 전환 전의 글 저장소. 로컬 기록용이며 **원격을 붙이거나 push하지 않습니다**(옛 커밋에 개인 네트워크 정보가 있음) |
 | 2026-09-17 개편 전 원본 | `/root/backups/pre-improve-20260917.tar.gz` (Termux 쪽 훅 포함) |
 
@@ -277,9 +277,9 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | **패키지 설치** | `apt-get update && apt-get install -y <패키지명>` (sudo 불필요) |
 | **메모리/스토리지 점검** | `free -m && df -h /` |
 | **Tailscale IP** | `100.x.y.z` |
-| **블로그 새 글 추가** | `/root/qofo.github.io/content/posts/09-<slug>.md` 작성(앞 글의 front matter 참고) → 커밋 → `/root/publish_blog.sh publish` (폰 교체 + push → Actions가 Pages 배포) |
+| **블로그 새 글 추가** | `/root/qofo.github.io/content/posts/09-<slug>.md` 작성(앞 글의 front matter 참고) → 커밋 → `/root/publish_blog.sh publish` (두 사본을 같은 커밋으로 빌드, 폰 교체, `main`·`gh-pages` 동시 push → GitHub가 1분 안에 Pages 갱신) |
 | **폰에서만 미리 보기** | `/root/publish_blog.sh phone` (커밋 안 한 변경도 빌드, 재시작 불필요) |
-| **블로그 배포 상태** | `/root/publish_blog.sh status`, `gh run list --repo qofo/qofo.github.io -L 3` |
+| **블로그 배포 상태** | `/root/publish_blog.sh status`, `gh api repos/qofo/qofo.github.io/pages/builds/latest --jq .status` |
 | **블로그 서버 시험** | `python3 /root/tests/test_serve_blog.py` (35개) |
 
 ---
@@ -290,6 +290,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
   * GitHub Pages의 대시보드는 `ngrok-skip-browser-warning` 헤더를 붙여 경고 페이지를 피합니다. 이 헤더 때문에 브라우저가 CORS preflight(OPTIONS)를 보내고, `serve_blog.py`가 204로 답합니다. OPTIONS 처리를 지우면 Pages의 대시보드가 멈춥니다.
   * ngrok 무료 플랜은 요청 수를 셉니다. 그래서 Pages 방문자는 홈 30초, 대시보드 5초 간격으로만 요청하고, 탭이 숨겨지면 멈춥니다(`hugo.toml`의 `pollHome`, `pollDashboard`).
 * 폰의 Ubuntu에는 tzdata가 없어서 Hugo 설정에 `timeZone`을 넣으면 폰 빌드가 실패합니다.
+* Pages 빌드는 GitHub Actions가 아니라 폰에서 합니다. git이 쓰는 토큰(classic, `repo` 권한)에 `workflow` 권한이 없어 `.github/workflows/`를 push할 수 없기 때문입니다. 그래서 GitHub 웹에서 글을 고치면 Pages에 반영되지 않고, 폰에서 `publish_blog.sh publish`를 실행해야 합니다.
 * 15분 주기 감시 작업은 Doze 중에 지연될 수 있습니다. Termux와 Termux:API 앱의 **배터리 최적화 해제**를 권장합니다.
 * 감시 작업(4241)과 기동 요청(4242)은 인터넷 연결이 확인된 상태에서만 실행됩니다.
 * 블로그 5편의 코드 예시는 v1 구조(`pgrep -f "serve_blog.py"` 기반 자동 시작) 기준이라 현재 구현과 다릅니다.
