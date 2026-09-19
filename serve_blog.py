@@ -12,7 +12,6 @@ import ctypes
 import sys
 
 PORT = int(os.environ.get("BLOG_PORT", "8080"))
-POSTS_DIR = "/posts"
 BATTERY_SYSFS = "/sys/class/power_supply/battery"
 
 # proot-distro replaces /proc/stat, /proc/uptime and /proc/loadavg with static files
@@ -433,1225 +432,91 @@ class TelemetryCollector:
 telemetry = TelemetryCollector()
 
 # ---------------------------------------------------------
-# Posts & Metadata
+# Static site (Hugo build) + telemetry API
 # ---------------------------------------------------------
-def plain_text(text):
-    # Card excerpts are inserted as plain text, so drop markdown link and emphasis marks
-    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
-    text = re.sub(r"[`*_]", "", text)
-    return text.strip()
+# publish_blog.sh builds the Hugo site into a fresh directory and repoints this
+# symlink at it, so a request never sees a half-written build.
+SITE_DIR = os.environ.get("BLOG_SITE_DIR", "/root/blog_public")
+
+CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".xml": "application/xml; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+}
+
+# Hugo fingerprints bundled CSS/JS (site.min.<sha256>.css), so those never change in place
+FINGERPRINTED = re.compile(r"\.[0-9a-f]{64}\.(css|js)$")
+
+# Served only when no build exists yet. A restart cannot fix a missing build, so this
+# answers 200 and the supervisor's health check does not loop restarting the server.
+NO_BUILD_PAGE = """<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>준비 중</title></head>
+<body style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.7;">
+<h1>폰 사본을 준비하고 있다</h1>
+<p>이 폰에는 아직 블로그 빌드가 없다. 같은 글을 <a href="https://qofo.github.io/">GitHub Pages</a>에서 읽을 수 있다.</p>
+</body></html>
+""".encode("utf-8")
+_warned_no_build = False
+
+METRICS_CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    # GitHub Pages visitors fetch through ngrok, whose free plan answers browsers with a
+    # warning page unless this header is present; the header makes the browser preflight.
+    "Access-Control-Allow-Headers": "ngrok-skip-browser-warning",
+    "Access-Control-Max-Age": "7200",
+}
+
+
+def resolve_static(url_path):
+    """Map a URL path to (kind, value).
+
+    kind is "file" (value = absolute path), "redirect" (value = path with a trailing slash),
+    "missing" or "no_build". Paths that escape the site root, contain dot segments or
+    control characters are reported as "missing".
+    """
+    root = os.path.realpath(SITE_DIR)
+    if not os.path.isfile(os.path.join(root, "index.html")):
+        return "no_build", None
+
+    path = urllib.parse.unquote(url_path, errors="strict") if "%" in url_path else url_path
+    if not path.startswith("/") or "\\" in path or any(ord(c) < 32 for c in path):
+        return "missing", None
+    parts = [p for p in path.split("/") if p]
+    if any(p.startswith(".") for p in parts):
+        return "missing", None
+
+    def inside(p):
+        return p == root or p.startswith(root + os.sep)
+
+    candidate = os.path.realpath(os.path.join(root, *parts))
+    if not inside(candidate):
+        return "missing", None
+
+    if os.path.isdir(candidate):
+        if not path.endswith("/"):
+            # Rebuilt from the segments, so "//host" can never become a protocol-relative Location
+            return "redirect", "/" + "/".join(parts) + "/"
+        candidate = os.path.realpath(os.path.join(candidate, "index.html"))
+        if not inside(candidate):
+            return "missing", None
+    if os.path.isfile(candidate):
+        return "file", candidate
+    return "missing", None
 
-def extract_metadata(filename, content):
-    # Everything comes from the file itself: "# 제목", a "작성일"/"태그" quote block,
-    # and the first ordinary paragraph as the card excerpt.
-    title = ""
-    date = ""
-    tags = []
-    excerpt = ""
 
-    for line in content.splitlines():
-        line_s = line.strip()
-        if not title and line_s.startswith("# "):
-            title = re.sub(r"^\[(.*)\]$", r"\1", line_s[2:].strip())
-        elif not date and "작성일" in line_s:
-            match = re.search(r"\d{4}년\s*\d{1,2}월\s*\d{1,2}일", line_s)
-            if match:
-                date = match.group(0)
-        elif not tags and "태그" in line_s:
-            tags = re.findall(r"`([^`]+)`", line_s)
-        elif not excerpt and line_s and line_s[0] not in "#>-*|`":
-            line_s = plain_text(line_s)
-            excerpt = line_s[:160] + "..." if len(line_s) > 160 else line_s
-
-    return {
-        "id": filename.replace(".md", ""),
-        "filename": filename,
-        "title": title or filename.replace(".md", ""),
-        "date": date,
-        "tags": tags,
-        "excerpt": excerpt
-    }
-
-def get_all_posts():
-    if not os.path.exists(POSTS_DIR):
-        return []
-    files = sorted([f for f in os.listdir(POSTS_DIR) if f.endswith(".md")])
-    posts = []
-    for f in files:
-        path = os.path.join(POSTS_DIR, f)
-        try:
-            with open(path, "r", encoding="utf-8") as file:
-                content = file.read()
-            meta = extract_metadata(f, content)
-            posts.append(meta)
-        except Exception as e:
-            print(f"Error reading {f}: {e}")
-    return posts
-
-# ---------------------------------------------------------
-# HTML Single Page App Template
-# ---------------------------------------------------------
-HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>스마트폰 한 대로 서버 만들기 · Mobile DevLog</title>
-  <!-- Pretendard Font -->
-  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
-  <!-- Marked.js for Markdown parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- Highlight.js for syntax highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <style>
-    :root {
-      --bg-color: #0b0f19;
-      --card-bg: #151c2c;
-      --card-border: #233047;
-      --card-hover: #1e293b;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.15);
-      --accent-hover: #0ea5e9;
-      --code-bg: #0b0f19;
-      --table-border: #233047;
-      --table-stripe: #151c2c;
-      --table-header: #1e293b;
-      --badge-bg: rgba(56, 189, 248, 0.12);
-      --badge-text: #38bdf8;
-      --header-bg: rgba(11, 15, 25, 0.88);
-      --success: #10b981;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-    }
-
-    [data-theme="light"] {
-      --bg-color: #f8fafc;
-      --card-bg: #ffffff;
-      --card-border: #e2e8f0;
-      --card-hover: #f1f5f9;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --accent: #0284c7;
-      --accent-glow: rgba(2, 132, 199, 0.1);
-      --accent-hover: #0369a1;
-      --code-bg: #f1f5f9;
-      --table-border: #e2e8f0;
-      --table-stripe: #f8fafc;
-      --table-header: #f1f5f9;
-      --badge-bg: #e0f2fe;
-      --badge-text: #0284c7;
-      --header-bg: rgba(248, 250, 252, 0.88);
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      line-height: 1.75;
-      padding-bottom: 80px;
-      -webkit-font-smoothing: antialiased;
-      transition: background-color 0.2s ease, color 0.2s ease;
-    }
-
-    /* Top Sticky Header */
-    .top-header {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      background-color: var(--header-bg);
-      border-bottom: 1px solid var(--card-border);
-      padding: 12px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: 1.15rem;
-      color: var(--text-main);
-      text-decoration: none;
-      cursor: pointer;
-    }
-
-    .brand .logo-icon {
-      background: linear-gradient(135deg, #38bdf8, #818cf8);
-      color: white;
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.1rem;
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .nav-btn {
-      background: none;
-      border: 1px solid var(--card-border);
-      color: var(--text-main);
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .nav-btn.active {
-      background-color: var(--badge-bg);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .nav-btn:hover {
-      background-color: var(--card-hover);
-      border-color: var(--accent);
-    }
-
-    .theme-toggle {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      color: var(--text-main);
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 1.05rem;
-      transition: all 0.2s ease;
-    }
-
-    .container {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 24px 16px 0;
-    }
-
-    /* Views */
-    #homeView, #articleView, #dashboardView {
-      display: none;
-    }
-
-    /* Hero / Intro section */
-    .hero {
-      background: linear-gradient(135deg, var(--card-bg) 0%, rgba(30, 41, 59, 0.4) 100%);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 24px 20px;
-      margin-bottom: 28px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    }
-
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background-color: var(--badge-bg);
-      color: var(--badge-text);
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 9999px;
-      margin-bottom: 12px;
-    }
-
-    .hero h1 {
-      font-size: 1.6rem;
-      font-weight: 800;
-      line-height: 1.35;
-      margin-bottom: 10px;
-      background: linear-gradient(135deg, #ffffff 40%, var(--accent) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    [data-theme="light"] .hero h1 {
-      background: linear-gradient(135deg, #0f172a 40%, var(--accent) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .hero p {
-      color: var(--text-muted);
-      font-size: 0.92rem;
-      margin-bottom: 16px;
-    }
-
-    /* Live Mini Telemetry Pill Widget in Hero */
-    .telemetry-pills {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 12px;
-      background: rgba(0, 0, 0, 0.2);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .telemetry-pills:hover {
-      border-color: var(--accent);
-      background: rgba(56, 189, 248, 0.05);
-    }
-
-    .pill-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.82rem;
-      background: var(--card-bg);
-      padding: 4px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--card-border);
-    }
-
-    .pill-label { color: var(--text-muted); }
-    .pill-val { font-weight: 700; color: var(--accent); }
-
-    /* Post Cards */
-    .section-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .posts-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .post-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 20px;
-      cursor: pointer;
-      text-decoration: none;
-      color: inherit;
-      transition: all 0.2s ease;
-      display: block;
-    }
-
-    .post-card:hover {
-      transform: translateY(-2px);
-      border-color: var(--accent);
-      box-shadow: 0 8px 24px var(--accent-glow);
-    }
-
-    .post-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 8px;
-      gap: 12px;
-    }
-
-    .post-card-title {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: var(--text-main);
-      line-height: 1.45;
-    }
-
-    .post-card:hover .post-card-title { color: var(--accent); }
-
-    .post-card-date {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-
-    .post-card-excerpt {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      margin-bottom: 14px;
-      line-height: 1.6;
-    }
-
-    .post-card-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag {
-      background-color: var(--badge-bg);
-      color: var(--badge-text);
-      font-size: 0.75rem;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-weight: 500;
-    }
-    .read-more {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    /* Article Viewer */
-    .article-header-nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .back-btn {
-      background-color: var(--card-bg);
-      border: 1px solid var(--card-border);
-      color: var(--text-main);
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .back-btn:hover {
-      background-color: var(--card-hover);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .post-switcher { display: flex; gap: 6px; }
-    .post-switch-btn {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      color: var(--text-muted);
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .post-switch-btn.active {
-      background-color: var(--badge-bg);
-      color: var(--accent);
-      border-color: var(--accent);
-    }
-
-    .article-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 32px 28px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    }
-
-    @media (max-width: 640px) {
-      .article-card { padding: 20px 16px; border-radius: 12px; }
-    }
-
-    /* Markdown Styles */
-    .markdown-body h1 {
-      font-size: 1.7rem; font-weight: 800; margin-bottom: 16px; line-height: 1.35;
-      padding-bottom: 12px; border-bottom: 1px solid var(--card-border); color: var(--text-main);
-    }
-    .markdown-body h2 {
-      font-size: 1.35rem; font-weight: 700; margin-top: 36px; margin-bottom: 14px;
-      line-height: 1.4; color: var(--accent);
-    }
-    .markdown-body h3 { font-size: 1.15rem; font-weight: 600; margin-top: 24px; margin-bottom: 10px; }
-    .markdown-body p { margin-bottom: 16px; color: var(--text-main); }
-    .markdown-body blockquote {
-      border-left: 4px solid var(--accent); padding: 12px 18px; background: var(--badge-bg);
-      color: var(--text-main); border-radius: 0 8px 8px 0; margin: 18px 0;
-    }
-    .markdown-body pre {
-      background-color: var(--code-bg) !important; border: 1px solid var(--card-border);
-      border-radius: 10px; padding: 16px; overflow-x: auto; margin: 18px 0; position: relative;
-    }
-    .markdown-body code { font-family: "JetBrains Mono", Consolas, Menlo, monospace; font-size: 0.88rem; }
-    .markdown-body p code, .markdown-body li code {
-      background: var(--code-bg); border: 1px solid var(--card-border); padding: 2px 6px;
-      border-radius: 4px; color: var(--accent);
-    }
-    .copy-btn {
-      position: absolute; top: 8px; right: 8px; background: var(--card-bg);
-      border: 1px solid var(--card-border); color: var(--text-muted); border-radius: 6px;
-      padding: 4px 8px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;
-    }
-    .copy-btn:hover { background: var(--card-hover); color: var(--text-main); border-color: var(--accent); }
-    .copy-btn.copied { background: #10b981; color: white; border-color: #10b981; }
-    .markdown-body table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.88rem; overflow-x: auto; display: block; }
-    .markdown-body th, .markdown-body td { border: 1px solid var(--table-border); padding: 10px 14px; text-align: left; }
-    .markdown-body th { background-color: var(--table-header); font-weight: 600; }
-    .markdown-body tr:nth-child(even) { background-color: var(--table-stripe); }
-    .markdown-body hr { border: none; border-top: 1px solid var(--card-border); margin: 32px 0; }
-    .markdown-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-    .markdown-body ul, .markdown-body ol { margin-bottom: 16px; padding-left: 24px; }
-    .markdown-body li { margin-bottom: 6px; }
-
-    .article-footer-nav {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px;
-      padding-top: 24px; border-top: 1px solid var(--card-border);
-    }
-    @media (max-width: 600px) { .article-footer-nav { grid-template-columns: 1fr; } }
-    .footer-nav-card {
-      background-color: var(--card-bg); border: 1px solid var(--card-border);
-      padding: 16px; border-radius: 10px; cursor: pointer; text-decoration: none;
-      color: inherit; transition: all 0.2s;
-    }
-    .footer-nav-card:hover { border-color: var(--accent); background-color: var(--card-hover); }
-    .footer-nav-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
-    .footer-nav-title { font-size: 0.92rem; font-weight: 700; color: var(--text-main); }
-
-    /* --------------------------------------------------------- */
-    /* DASHBOARD VIEW STYLING */
-    /* --------------------------------------------------------- */
-    .dash-header {
-      background: linear-gradient(135deg, var(--card-bg) 0%, rgba(30, 41, 59, 0.4) 100%);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 24px 20px;
-      margin-bottom: 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-
-    .dash-device-title h2 { font-size: 1.35rem; font-weight: 800; margin-bottom: 4px; }
-    .dash-device-meta { font-size: 0.84rem; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 10px; }
-
-    .live-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: var(--success);
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 4px 12px;
-      border-radius: 9999px;
-    }
-
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      background-color: var(--success);
-      border-radius: 50%;
-      animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-      0% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(1.3); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-
-    .dash-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 18px;
-      margin-bottom: 24px;
-    }
-
-    .dash-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 20px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    }
-
-    .dash-card-title {
-      font-size: 0.92rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .dash-big-stat {
-      font-size: 2rem;
-      font-weight: 800;
-      color: var(--text-main);
-      line-height: 1.1;
-      margin-bottom: 12px;
-    }
-
-    .dash-progress-wrap {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.08);
-      height: 8px;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 12px;
-    }
-
-    .dash-progress-bar {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 4px;
-      transition: width 0.3s ease;
-    }
-
-    .dash-sub-stats {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.82rem;
-      color: var(--text-muted);
-    }
-
-    /* CPU Cores Cluster Grid */
-    .cores-section-title {
-      font-size: 0.8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      margin: 12px 0 8px;
-    }
-
-    .cores-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .core-pill {
-      background: rgba(0, 0, 0, 0.25);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 8px 10px;
-    }
-
-    .core-header {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.75rem;
-      margin-bottom: 4px;
-    }
-
-    .core-name { font-weight: 600; color: var(--text-main); }
-    .core-freq { font-family: monospace; color: var(--accent); }
-
-    .core-bar-wrap {
-      width: 100%;
-      height: 5px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .core-bar {
-      height: 100%;
-      background: var(--accent);
-      border-radius: 3px;
-      transition: width 0.2s ease;
-    }
-
-    /* Battery Card */
-    .battery-status-box {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .battery-icon-large {
-      font-size: 2.4rem;
-      line-height: 1;
-    }
-
-    .battery-info-text h3 { font-size: 1.8rem; font-weight: 800; line-height: 1.1; }
-    .battery-info-text p { font-size: 0.82rem; color: var(--text-muted); }
-
-    .battery-notice {
-      background: rgba(245, 158, 11, 0.1);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      color: #fbbf24;
-      line-height: 1.45;
-    }
-
-    .battery-notice code {
-      background: rgba(0, 0, 0, 0.3);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: monospace;
-      color: #fff;
-    }
-
-    .loading-spinner {
-      text-align: center;
-      padding: 40px;
-      color: var(--text-muted);
-      font-size: 1rem;
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Top Sticky Header -->
-  <header class="top-header">
-    <div class="brand" onclick="goHome()">
-      <div class="logo-icon">⚡</div>
-      <span>Antigravity DevLog</span>
-    </div>
-    <div class="header-actions">
-      <button class="nav-btn" id="navBlogBtn" onclick="goHome()">
-        <span>📚</span>
-        <span>글 목록</span>
-      </button>
-      <button class="nav-btn" id="navDashBtn" onclick="goDashboard()">
-        <span>📊</span>
-        <span>대시보드</span>
-      </button>
-      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="테마 전환">🌓</button>
-    </div>
-  </header>
-
-  <div class="container">
-    <!-- 1. HOME VIEW: Post List & Live Mini Telemetry -->
-    <main id="homeView">
-      <div class="hero">
-        <div class="hero-badge">🚀 Mobile Edge Workstation</div>
-        <h1>스마트폰 한 대로 서버 만들기</h1>
-        <p>서랍에 있던 갤럭시 노트 FE에 Termux와 proot 우분투를 올려 24시간 도는 블로그 서버로 만든 기록입니다. 설치와 외부 공개부터 장애 분석과 재설계까지 차례로 기록하고 있습니다. 이 페이지는 그 폰이 직접 응답하고 있습니다.</p>
-
-        <!-- Live Telemetry Mini Banner -->
-        <div class="telemetry-pills" onclick="goDashboard()" title="클릭하여 상세 시스템 대시보드 열기">
-          <div class="pill-item">
-            <span class="pill-label">🔥 CPU</span>
-            <span class="pill-val" id="miniCpu">--%</span>
-          </div>
-          <div class="pill-item">
-            <span class="pill-label">💾 RAM</span>
-            <span class="pill-val" id="miniRam">--%</span>
-          </div>
-          <div class="pill-item">
-            <span class="pill-label">🌐 NET</span>
-            <span class="pill-val" id="miniNet">-- KB/s</span>
-          </div>
-          <div class="pill-item">
-            <span class="pill-label">🔋 BATT</span>
-            <span class="pill-val" id="miniBatt">--%</span>
-          </div>
-          <div class="pill-item">
-            <span class="pill-label">⏱️ UPTIME</span>
-            <span class="pill-val" id="miniUptime">--</span>
-          </div>
-        </div>
-      </div>
-
-      <h2 class="section-title">📖 시리즈 포스트 목록</h2>
-      <div class="posts-grid" id="postsList">
-        <div class="loading-spinner">포스트 목록을 불러오는 중...</div>
-      </div>
-    </main>
-
-    <!-- 2. ARTICLE VIEW: Post Reader -->
-    <article class="article-view" id="articleView">
-      <div class="article-header-nav">
-        <button class="back-btn" onclick="goHome()">← 목록으로 돌아가기</button>
-        <div class="post-switcher" id="postSwitcher"></div>
-      </div>
-
-      <div class="article-card">
-        <div class="markdown-body" id="articleContent">
-          <div class="loading-spinner">글을 불러오는 중입니다...</div>
-        </div>
-        <div class="article-footer-nav" id="articleFooterNav"></div>
-      </div>
-    </article>
-
-    <!-- 3. DASHBOARD VIEW: Full System Telemetry -->
-    <section class="dashboard-view" id="dashboardView">
-      <div class="dash-header">
-        <div class="dash-device-title">
-          <h2>📱 스마트폰 시스템 실시간 텔레메트리</h2>
-          <div class="dash-device-meta">
-            <span>Samsung Galaxy Note FE (SM-N935L)</span>
-            <span>Exynos 8890 8-Core (aarch64)</span>
-            <span>Ubuntu 26.04 LTS (PRoot)</span>
-          </div>
-        </div>
-        <div class="live-status">
-          <span class="live-dot"></span>
-          <span id="lastUpdatedText">실시간 수신 중 (2s)</span>
-        </div>
-      </div>
-
-      <!-- Metrics Grid -->
-      <div class="dash-grid">
-        <!-- Card 1: CPU Overview -->
-        <div class="dash-card">
-          <div class="dash-card-title">
-            <span>🔥 8코어 CPU 사용률</span>
-            <span id="dashCpuTotalFreq" style="font-family: monospace; color: var(--accent);">-- MHz</span>
-          </div>
-          <div class="dash-big-stat" id="dashCpuTotal">--%</div>
-          <div class="dash-progress-wrap">
-            <div class="dash-progress-bar" id="dashCpuBar" style="width: 0%;"></div>
-          </div>
-          <div class="dash-sub-stats">
-            <span>Load Avg: <b id="dashLoadAvg">--</b></span>
-            <span>업타임: <b id="dashUptime">--</b></span>
-          </div>
-        </div>
-
-        <!-- Card 2: Memory (RAM & Swap) -->
-        <div class="dash-card">
-          <div class="dash-card-title">
-            <span>💾 메모리 (RAM & zRAM)</span>
-            <span id="dashRamText">-- / -- MB</span>
-          </div>
-          <div class="dash-big-stat" id="dashRamPercent">--%</div>
-          <div class="dash-progress-wrap">
-            <div class="dash-progress-bar" id="dashRamBar" style="width: 0%;"></div>
-          </div>
-          <div class="dash-sub-stats">
-            <span>zRAM Swap: <b id="dashSwapText">--%</b></span>
-            <span>가용 RAM: <b id="dashRamAvail">-- MB</b></span>
-          </div>
-        </div>
-
-        <!-- Card 3: Storage & Network -->
-        <div class="dash-card">
-          <div class="dash-card-title">
-            <span>📶 네트워크 & 스토리지</span>
-            <span id="dashStorageText">내장 32GB 가용</span>
-          </div>
-          <div class="dash-big-stat" style="font-size: 1.5rem; display: flex; justify-content: space-between;">
-            <div><small style="font-size: 0.8rem; color: var(--text-muted); display: block;">다운로드 (RX)</small><span id="dashNetRx">-- KB/s</span></div>
-            <div><small style="font-size: 0.8rem; color: var(--text-muted); display: block;">업로드 (TX)</small><span id="dashNetTx">-- KB/s</span></div>
-          </div>
-          <div class="dash-progress-wrap" style="margin-top: 14px;">
-            <div class="dash-progress-bar" id="dashStorageBar" style="width: 40%; background: #818cf8;"></div>
-          </div>
-          <div class="dash-sub-stats">
-            <span>내장 스토리지 사용률: <b id="dashStoragePct">--%</b></span>
-            <span>활성 IF: <b id="dashIfaces">wlan0, tun1</b></span>
-          </div>
-        </div>
-
-        <!-- Card 4: Battery & Thermals (Termux:API) -->
-        <div class="dash-card">
-          <div class="dash-card-title">
-            <span>🔋 배터리 & 하드웨어 전원</span>
-            <span id="dashBattPlugged">전원 연결됨</span>
-          </div>
-          <div class="battery-status-box">
-            <div class="battery-icon-large" id="dashBattIcon">⚡</div>
-            <div class="battery-info-text">
-              <h3 id="dashBattPct">--%</h3>
-              <p id="dashBattStatus">상태 확인 중...</p>
-            </div>
-          </div>
-          <div class="dash-sub-stats" id="dashBattDetails">
-            <span>온도: <b id="dashBattTemp">-- °C</b></span>
-            <span>상태: <b id="dashBattHealth">GOOD</b></span>
-          </div>
-          <div class="battery-notice" id="dashBattNotice" style="display: none; margin-top: 10px;">
-            <span>ℹ️ <b>Termux:API 미설치</b>: 폰의 실제 배터리/온도를 읽어오려면 Termux 터미널에서 <code>pkg install termux-api</code>를 실행하세요.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- CPU 8-Core Clustered Detail Card -->
-      <div class="dash-card" style="margin-bottom: 30px;">
-        <div class="dash-card-title">
-          <span>⚙️ Samsung Exynos 8890 코어별 클러스터 상세 (big.LITTLE)</span>
-          <span style="color: var(--text-muted); font-size: 0.8rem;">4x Exynos-M1 (Big) + 4x Cortex-A53 (Little)</span>
-        </div>
-
-        <div class="cores-section-title">🚀 고성능 빅코어 클러스터 (Cores 4~7: Exynos-M1, 최대 2.6GHz)</div>
-        <div class="cores-grid" id="bigCoresGrid"></div>
-
-        <div class="cores-section-title" style="margin-top: 16px;">🌱 저전력 리틀코어 클러스터 (Cores 0~3: Cortex-A53, 최대 1.58GHz)</div>
-        <div class="cores-grid" id="littleCoresGrid"></div>
-      </div>
-    </section>
-  </div>
-
-  <script>
-    let postsData = [];
-    let currentPostId = null;
-    let metricsTimer = null;
-
-    // Theme Management
-    function initTheme() {
-      const saved = localStorage.getItem('theme');
-      if (saved) {
-        document.documentElement.setAttribute('data-theme', saved);
-      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-        document.documentElement.setAttribute('data-theme', 'light');
-      }
-    }
-
-    function toggleTheme() {
-      const current = document.documentElement.getAttribute('data-theme') || 'dark';
-      const next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('theme', next);
-    }
-
-    // Navigation & Routing
-    function goHome() {
-      window.location.hash = '';
-      showHome();
-    }
-
-    function goDashboard() {
-      window.location.hash = '#dashboard';
-      showDashboard();
-    }
-
-    function showHome() {
-      document.getElementById('homeView').style.display = 'block';
-      document.getElementById('articleView').style.display = 'none';
-      document.getElementById('dashboardView').style.display = 'none';
-      document.getElementById('navBlogBtn').classList.add('active');
-      document.getElementById('navDashBtn').classList.remove('active');
-      window.scrollTo(0, 0);
-      startPollingMetrics(4000); // lighter polling on home
-    }
-
-    function showDashboard() {
-      document.getElementById('homeView').style.display = 'none';
-      document.getElementById('articleView').style.display = 'none';
-      document.getElementById('dashboardView').style.display = 'block';
-      document.getElementById('navBlogBtn').classList.remove('active');
-      document.getElementById('navDashBtn').classList.add('active');
-      window.scrollTo(0, 0);
-      fetchMetrics(); // immediate fetch
-      startPollingMetrics(2000); // 2s polling
-    }
-
-    function showPost(postId) {
-      currentPostId = postId;
-      document.getElementById('homeView').style.display = 'none';
-      document.getElementById('articleView').style.display = 'block';
-      document.getElementById('dashboardView').style.display = 'none';
-      document.getElementById('navBlogBtn').classList.add('active');
-      document.getElementById('navDashBtn').classList.remove('active');
-      window.scrollTo(0, 0);
-      stopPollingMetrics();
-      loadPostContent(postId);
-    }
-
-    // Polling Controller
-    function startPollingMetrics(intervalMs) {
-      stopPollingMetrics();
-      fetchMetrics();
-      metricsTimer = setInterval(fetchMetrics, intervalMs);
-    }
-
-    function stopPollingMetrics() {
-      if (metricsTimer) {
-        clearInterval(metricsTimer);
-        metricsTimer = null;
-      }
-    }
-
-    // Metrics Fetcher & DOM Updater
-    async function fetchMetrics() {
-      try {
-        const res = await fetch('/api/metrics');
-        if (!res.ok) return;
-        const data = await res.json();
-        updateTelemetryUI(data);
-      } catch (err) {
-        // quiet error
-      }
-    }
-
-    function updateTelemetryUI(data) {
-      // 1. Mini widgets (Hero)
-      const cpuTot = data.cpu.total_percent;
-      document.getElementById('miniCpu').innerText = cpuTot + '%';
-      document.getElementById('miniRam').innerText = data.memory.ram_percent + '%';
-      document.getElementById('miniNet').innerText = (data.network.rx_kbs + data.network.tx_kbs).toFixed(1) + ' KB/s';
-      document.getElementById('miniUptime').innerText = data.system.uptime_str;
-
-      if (data.battery && data.battery.available) {
-        document.getElementById('miniBatt').innerText = data.battery.percentage + '%';
-      } else {
-        document.getElementById('miniBatt').innerText = 'AC연결';
-      }
-
-      // 2. Full Dashboard View Update
-      if (document.getElementById('dashboardView').style.display === 'block') {
-        // CPU Total Card
-        document.getElementById('dashCpuTotal').innerText = cpuTot + '%';
-        const cpuBar = document.getElementById('dashCpuBar');
-        cpuBar.style.width = cpuTot + '%';
-        cpuBar.style.backgroundColor = cpuTot > 80 ? 'var(--danger)' : cpuTot > 50 ? 'var(--warning)' : 'var(--accent)';
-
-        // Average freq
-        const avgFreq = Math.round(data.cpu.cores.reduce((acc, c) => acc + c.freq_mhz, 0) / 8);
-        document.getElementById('dashCpuTotalFreq').innerText = avgFreq + ' MHz avg';
-        document.getElementById('dashLoadAvg').innerText = data.system.load_avg.join(', ');
-        document.getElementById('dashUptime').innerText = data.system.uptime_str;
-
-        // RAM Card
-        const ram = data.memory;
-        document.getElementById('dashRamPercent').innerText = ram.ram_percent + '%';
-        document.getElementById('dashRamText').innerText = ram.ram_used_mb + ' / ' + ram.ram_total_mb + ' MB';
-        document.getElementById('dashRamBar').style.width = ram.ram_percent + '%';
-        document.getElementById('dashRamAvail').innerText = (ram.ram_total_mb - ram.ram_used_mb) + ' MB';
-        document.getElementById('dashSwapText').innerText = ram.swap_percent + '% (' + ram.swap_used_mb + ' MB)';
-
-        // Network & Storage
-        document.getElementById('dashNetRx').innerText = data.network.rx_kbs + ' KB/s';
-        document.getElementById('dashNetTx').innerText = data.network.tx_kbs + ' KB/s';
-        document.getElementById('dashStoragePct').innerText = data.storage.percent + '%';
-        document.getElementById('dashStorageText').innerText = data.storage.free_gb + ' GB 가용';
-        document.getElementById('dashStorageBar').style.width = data.storage.percent + '%';
-        document.getElementById('dashIfaces').innerText = data.network.active_interfaces.join(', ');
-
-        // Battery
-        const batt = data.battery;
-        const battNotice = document.getElementById('dashBattNotice');
-        const battDetails = document.getElementById('dashBattDetails');
-        if (batt && batt.available) {
-          battNotice.style.display = 'none';
-          battDetails.style.display = 'flex';
-          document.getElementById('dashBattPct').innerText = batt.percentage + '%';
-          document.getElementById('dashBattStatus').innerText = (batt.status === 'CHARGING' ? '⚡ 고속 충전 중' : '🔋 배터리 방전 중') + ' (' + batt.plugged + ')';
-          document.getElementById('dashBattIcon').innerText = batt.status === 'CHARGING' ? '⚡' : '🔋';
-          document.getElementById('dashBattPlugged').innerText = batt.plugged;
-          document.getElementById('dashBattTemp').innerText = batt.temperature + ' °C';
-          document.getElementById('dashBattHealth').innerText = batt.health;
-        } else {
-          battNotice.style.display = 'block';
-          battDetails.style.display = 'none';
-          document.getElementById('dashBattPct').innerText = '상시 전원';
-          document.getElementById('dashBattStatus').innerText = 'Termux:API 보조 앱 필요';
-          document.getElementById('dashBattIcon').innerText = '🔌';
-          document.getElementById('dashBattPlugged').innerText = 'AC 상시 공급';
-          if (batt && batt.cli_installed && !batt.app_installed) {
-            battNotice.innerHTML = '<span>ℹ️ <b>Termux:API 안드로이드 앱 설치 필요</b>: 터미널 패키지(<code>pkg install termux-api</code>)는 정상 설치되었습니다! 스마트폰에 <b>Termux:API 보조 앱(APK)</b>을 설치하시면 배터리 잔량과 온도가 즉시 연동됩니다.</span>';
-          } else if (batt && batt.reason) {
-            battNotice.innerHTML = '<span>ℹ️ <b>' + batt.reason + '</b></span>';
-          }
-        }
-
-        // 8 Cores Breakdown Grid
-        renderCoresList('littleCoresGrid', data.cpu.cores.slice(0, 4));
-        renderCoresList('bigCoresGrid', data.cpu.cores.slice(4, 8));
-
-        // Timestamp
-        const d = new Date();
-        document.getElementById('lastUpdatedText').innerText = '실시간 수신 중 (' + d.toLocaleTimeString() + ')';
-      }
-    }
-
-    function renderCoresList(elementId, coresList) {
-      const el = document.getElementById(elementId);
-      el.innerHTML = '';
-      coresList.forEach(core => {
-        const div = document.createElement('div');
-        div.className = 'core-pill';
-        const barColor = core.usage_percent > 80 ? 'var(--danger)' : core.usage_percent > 50 ? 'var(--warning)' : 'var(--accent)';
-        div.innerHTML = `
-          <div class="core-header">
-            <span class="core-name">${core.name}</span>
-            <span class="core-freq">${core.freq_mhz > 0 ? core.freq_mhz + ' MHz' : 'Sleep'} · ${core.usage_percent}%</span>
-          </div>
-          <div class="core-bar-wrap">
-            <div class="core-bar" style="width: ${core.usage_percent}%; background-color: ${barColor};"></div>
-          </div>
-        `;
-        el.appendChild(div);
-      });
-    }
-
-    // Load Post Content
-    async function loadPostContent(postId) {
-      const contentEl = document.getElementById('articleContent');
-      contentEl.innerHTML = '<div class="loading-spinner">글을 불러오는 중입니다...</div>';
-      updatePostSwitcher(postId);
-
-      try {
-        const res = await fetch('/api/post?id=' + encodeURIComponent(postId));
-        if (!res.ok) throw new Error('게시글을 찾을 수 없습니다.');
-        const markdown = await res.text();
-
-        marked.setOptions({
-          highlight: function(code, lang) {
-            const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-            return hljs.highlight(code, { language }).value;
-          },
-          breaks: true,
-          gfm: true
-        });
-
-        contentEl.innerHTML = marked.parse(markdown);
-
-        // Add copy buttons
-        contentEl.querySelectorAll('pre').forEach(pre => {
-          const btn = document.createElement('button');
-          btn.className = 'copy-btn';
-          btn.innerText = 'Copy';
-          btn.onclick = () => {
-            const code = pre.querySelector('code')?.innerText || pre.innerText;
-            navigator.clipboard.writeText(code).then(() => {
-              btn.innerText = 'Copied!';
-              btn.classList.add('copied');
-              setTimeout(() => {
-                btn.innerText = 'Copy';
-                btn.classList.remove('copied');
-              }, 2000);
-            });
-          };
-          pre.appendChild(btn);
-        });
-
-        updateFooterNav(postId);
-      } catch (err) {
-        contentEl.innerHTML = '<div style="color: #ef4444; padding: 20px;">' + err.message + '</div>';
-      }
-    }
-
-    function updatePostSwitcher(activeId) {
-      const switcher = document.getElementById('postSwitcher');
-      switcher.innerHTML = '';
-      postsData.forEach((post, idx) => {
-        const btn = document.createElement('button');
-        btn.className = 'post-switch-btn' + (post.id === activeId ? ' active' : '');
-        btn.innerText = (idx + 1) + '편';
-        btn.onclick = () => { window.location.hash = '#post=' + post.id; };
-        switcher.appendChild(btn);
-      });
-    }
-
-    function updateFooterNav(postId) {
-      const navEl = document.getElementById('articleFooterNav');
-      navEl.innerHTML = '';
-      const idx = postsData.findIndex(p => p.id === postId);
-      if (idx === -1) return;
-
-      const prev = idx > 0 ? postsData[idx - 1] : null;
-      const next = idx < postsData.length - 1 ? postsData[idx + 1] : null;
-
-      if (prev) {
-        const prevCard = document.createElement('div');
-        prevCard.className = 'footer-nav-card';
-        prevCard.innerHTML = '<div class="footer-nav-label">← 이전 글</div><div class="footer-nav-title">' + prev.title + '</div>';
-        prevCard.onclick = () => window.location.hash = '#post=' + prev.id;
-        navEl.appendChild(prevCard);
-      } else {
-        navEl.appendChild(document.createElement('div'));
-      }
-
-      if (next) {
-        const nextCard = document.createElement('div');
-        nextCard.className = 'footer-nav-card';
-        nextCard.style.textAlign = 'right';
-        nextCard.innerHTML = '<div class="footer-nav-label">다음 글 →</div><div class="footer-nav-title">' + next.title + '</div>';
-        nextCard.onclick = () => window.location.hash = '#post=' + next.id;
-        navEl.appendChild(nextCard);
-      }
-    }
-
-    async function loadPosts() {
-      try {
-        const res = await fetch('/api/posts');
-        postsData = await res.json();
-        renderPostsList();
-        handleHash();
-      } catch (err) {
-        document.getElementById('postsList').innerHTML = '<div style="color: #ef4444; padding: 20px;">포스트를 불러오는 중 오류가 발생했습니다.</div>';
-      }
-    }
-
-    function renderPostsList() {
-      const container = document.getElementById('postsList');
-      container.innerHTML = '';
-
-      postsData.forEach(post => {
-        const card = document.createElement('a');
-        card.className = 'post-card';
-        card.href = '#post=' + post.id;
-
-        const tagsHtml = post.tags.map(t => '<span class="tag">#' + t + '</span>').join('');
-
-        card.innerHTML = `
-          <div class="post-card-header">
-            <h3 class="post-card-title">${post.title}</h3>
-            <span class="post-card-date">${post.date}</span>
-          </div>
-          <p class="post-card-excerpt">${post.excerpt}</p>
-          <div class="post-card-footer">
-            <div class="tags">${tagsHtml}</div>
-            <span class="read-more">읽기 →</span>
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    }
-
-    function handleHash() {
-      const hash = window.location.hash;
-      if (hash === '#dashboard') {
-        showDashboard();
-      } else if (hash.startsWith('#post=')) {
-        const postId = hash.replace('#post=', '');
-        showPost(postId);
-      } else {
-        showHome();
-      }
-    }
-
-    window.addEventListener('hashchange', handleHash);
-
-    // Initial Execution
-    initTheme();
-    loadPosts();
-  </script>
-</body>
-</html>
-"""
-
-# ---------------------------------------------------------
-# HTTP Request Handler
-# ---------------------------------------------------------
 class BlogRequestHandler(http.server.BaseHTTPRequestHandler):
     # Drop idle or stalled clients instead of holding a worker thread forever
     timeout = 30
@@ -1659,66 +524,99 @@ class BlogRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET(head_only=True)
 
+    def do_OPTIONS(self):
+        # CORS preflight for /api/metrics from the GitHub Pages copy of the site
+        self.send_response(204)
+        if urllib.parse.urlsplit(self.path).path == "/api/metrics":
+            for k, v in METRICS_CORS.items():
+                self.send_header(k, v)
+        self.send_header("Allow", "GET, HEAD, OPTIONS")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self, head_only=False):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
-        query = urllib.parse.parse_qs(parsed.query)
+        path = urllib.parse.urlsplit(self.path).path
 
         if path == "/api/metrics":
             data = json.dumps(telemetry.get_metrics(), ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            if not head_only:
-                self.wfile.write(data)
+            self.send_body(200, data, "application/json; charset=utf-8", head_only,
+                           {"Cache-Control": "no-store", **METRICS_CORS})
             return
 
-        elif path == "/api/posts":
-            posts = get_all_posts()
-            data = json.dumps(posts, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Access-Control-Allow-Origin", "*")
+        try:
+            kind, value = resolve_static(path)
+        except UnicodeDecodeError:
+            kind, value = "missing", None
+
+        if kind == "file":
+            self.send_file(value, head_only)
+        elif kind == "redirect":
+            self.send_response(301)
+            self.send_header("Location", urllib.parse.quote(value))
+            self.send_header("Content-Length", "0")
             self.end_headers()
-            if not head_only:
-                self.wfile.write(data)
-            return
-
-        elif path == "/api/post":
-            post_id = query.get("id", [""])[0]
-            if not post_id or "/" in post_id or ".." in post_id:
-                self.send_error(400, "Invalid post ID")
-                return
-
-            file_path = os.path.join(POSTS_DIR, f"{post_id}.md")
-            if not os.path.exists(file_path):
-                self.send_error(404, "Post not found")
-                return
-
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read().encode("utf-8")
-
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(content)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            if not head_only:
-                self.wfile.write(content)
-            return
-
+        elif kind == "no_build":
+            global _warned_no_build
+            if not _warned_no_build:
+                print(f"[WARN] No site build at {SITE_DIR}; run /root/publish_blog.sh phone", flush=True)
+                _warned_no_build = True
+            if path == "/":
+                self.send_body(200, NO_BUILD_PAGE, "text/html; charset=utf-8", head_only,
+                               {"Cache-Control": "no-store"})
+            else:
+                self.send_body(404, NO_BUILD_PAGE, "text/html; charset=utf-8", head_only,
+                               {"Cache-Control": "no-store"})
         else:
-            # SPA HTML
-            content = HTML_TEMPLATE.encode("utf-8")
+            page = os.path.join(os.path.realpath(SITE_DIR), "404.html")
+            try:
+                with open(page, "rb") as f:
+                    body = f.read()
+            except OSError:
+                body = b"Not Found"
+            self.send_body(404, body, "text/html; charset=utf-8", head_only, {"Cache-Control": "no-cache"})
+
+    def send_body(self, code, body, content_type, head_only, extra_headers=None):
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (extra_headers or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(body)
+
+    def send_file(self, file_path, head_only):
+        try:
+            f = open(file_path, "rb")
+        except OSError:
+            self.send_error(404)
+            return
+        with f:
+            st = os.fstat(f.fileno())
+            etag = '"%x-%x"' % (st.st_mtime_ns, st.st_size)
+            if FINGERPRINTED.search(file_path):
+                cache = "public, max-age=31536000, immutable"
+            else:
+                cache = "no-cache"
+
+            if etag in [t.strip() for t in self.headers.get("If-None-Match", "").split(",")]:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", cache)
+                self.end_headers()
+                return
+
+            ext = os.path.splitext(file_path)[1].lower()
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Type", CONTENT_TYPES.get(ext, "application/octet-stream"))
+            self.send_header("Content-Length", str(st.st_size))
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", cache)
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             if not head_only:
-                self.wfile.write(content)
+                shutil.copyfileobj(f, self.wfile)
 
     def log_message(self, format, *args):
         pass
@@ -1736,7 +634,7 @@ class BlogServer(socketserver.ThreadingTCPServer):
 
 def run():
     with BlogServer(("0.0.0.0", PORT), BlogRequestHandler) as httpd:
-        print(f"Blog & Dashboard server running on http://0.0.0.0:{PORT}")
+        print(f"Blog & Dashboard server running on http://0.0.0.0:{PORT}, serving {SITE_DIR}")
         httpd.serve_forever()
 
 if __name__ == "__main__":

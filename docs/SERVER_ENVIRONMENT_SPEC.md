@@ -2,7 +2,7 @@
 # Server Environment Specification & Agent Handoff Guide
 
 > **최종 갱신일**: 2026년 9월 19일  
-> **문서 버전**: v2.2.0 (Tailscale 전용 내부 문서 서버 추가)  
+> **문서 버전**: v2.3.0 (블로그를 Hugo로 전환, GitHub Pages와 동시 배포)  
 > **대상**: 이 환경에서 작업할 모든 후속 AI 에이전트 (Claude Code, Antigravity CLI 등)  
 > **핵심 키워드**: `Samsung Galaxy Note FE`, `Termux`, `PRoot-Distro`, `Ubuntu 26.04 LTS`, `aarch64`, `No-Systemd`, `Tailscale`, `ngrok`, `Supervisor`
 
@@ -14,6 +14,8 @@
 **스마트폰(Android) 공기계의 Termux 앱 내에서 `proot-distro`로 우분투(Ubuntu) 환경을 에뮬레이션하여 24시간 가동 중인 초경량 모바일 워크스테이션**입니다.
 
 이 위에서 **기술 블로그 + 실시간 하드웨어 대시보드**(`serve_blog.py`, 포트 8080)가 돌고, **ngrok 고정 도메인**으로 외부에 공개됩니다. 두 서비스는 Termux 쪽에서 띄운 **감시 데몬**이 관리합니다(5장).
+
+블로그는 Hugo 사이트(`/root/qofo.github.io`)이고, 같은 원본을 **폰과 GitHub Pages(`https://qofo.github.io/`) 두 곳**에서 서비스합니다. 폰은 자기가 빌드한 정적 파일을 보내고, 대시보드 수치(`/api/metrics`)는 어느 쪽에서 열어도 폰에서 옵니다(5장 관련 파일, 10장).
 
 일반적인 리눅스 서버 상식(systemd, Docker, root 권한, 포트포워딩 등)이 그대로 적용되지 않으므로, **이 문서의 제약사항과 규칙**을 숙지한 상태에서 명령어를 실행해야 합니다.
 
@@ -145,8 +147,10 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | Termux `~/.termux/boot/start-server.sh` | 부팅 시 wake-lock, sshd, 런처 실행, 감시 작업 4241 등록 |
 | Termux `~/.bashrc` | Termux 로그인마다 런처 실행 (데몬이 있으면 아무것도 안 함) |
 | `/root/.bashrc` | 대화형 proot 로그인 시 `start_services.sh login-check` |
-| `/root/serve_blog.py` | 블로그 + 대시보드 (`/api/metrics`, `/api/posts`, `/api/post?id=`). 멀티스레드, 요청 타임아웃 30초 |
-| `/posts/*.md` | 블로그 글 (현재 8편, 파일 추가 시 자동 색인) |
+| `/root/serve_blog.py` | `/root/blog_public`의 정적 파일(Hugo 빌드) + `/api/metrics`(CORS 허용, preflight 응답). 멀티스레드, 요청 타임아웃 30초. 빌드가 없으면 `/`에 200 안내 페이지 |
+| `/root/publish_blog.sh` | 폰용 Hugo 빌드와 교체(`phone`), 폰 빌드 + GitHub push(`publish`), 상태(`status`) |
+| `/root/blog_public` → `/root/blog_builds/<UTC시각>` | 폰이 서비스하는 빌드. 심볼릭 링크를 rename으로 바꿔 무중단 교체, 최근 3개 보관 |
+| `/root/qofo.github.io/content/posts/*.md` | 블로그 글 원본 (현재 8편). `/posts`는 Hugo 전환 전 기록으로만 남아 있음 |
 | `/root/.start_services.pid`, `.start_services.lock` | 데몬 PID 파일과 단일 실행용 lock |
 | `/root/.services_disabled` | `stop` 시 생성. 있으면 어떤 경로로도 자동 시작하지 않음 |
 | `/root/.restart_requested` | `restart` 플래그 파일. 데몬이 감시 루프에서 확인 후 서비스 교체 |
@@ -219,7 +223,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 10. ⚠️ **코드 수정 절차**: 수정 → `git -C /root diff`로 확인 → 커밋 → `start_services.sh restart` 순서를 지키십시오.
 11. ❌ **내부 문서 서버를 `0.0.0.0`에 바인딩하거나 `serve_blog.py`·`start_services.sh`에 합치지 말 것**
     - 8080은 ngrok으로 인터넷에 공개됩니다. 비공개 문서는 반드시 별도 프로세스가 Tailscale 주소(8081)에서만 제공해야 합니다.
-    - 문서를 추가할 때는 `/root/private_docs.list`에 한 줄을 넣기만 하면 됩니다(`/posts`에 두면 공개됩니다).
+    - 문서를 추가할 때는 `/root/private_docs.list`에 한 줄을 넣기만 하면 됩니다(블로그 저장소 `qofo.github.io`에 넣으면 공개됩니다).
 
 ---
 
@@ -245,12 +249,12 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | 대상 | 방식 |
 |:---|:---|
 | `/root` | git 저장소. 허용 목록 `.gitignore`로 **서버 파일만 추적**하고, 자격 증명·캐시·에이전트 상태는 제외 |
-| `/posts` | git 저장소 (글 추가 시 `git -C /posts add -A && git -C /posts commit`) |
+| `/root/qofo.github.io` | 블로그 원본 git 저장소. 원격 `github.com/qofo/qofo.github.io`(공개) |
+| `/posts` | Hugo 전환 전의 글 저장소. 로컬 기록용이며 **원격을 붙이거나 push하지 않습니다**(옛 커밋에 개인 네트워크 정보가 있음) |
 | 2026-09-17 개편 전 원본 | `/root/backups/pre-improve-20260917.tar.gz` (Termux 쪽 훅 포함) |
 
-* ⚠️ **기기 밖 백업은 아직 없습니다.** 다음 중 하나가 필요합니다.
-  * 폰에서 `termux-setup-storage`를 실행하고 저장소 권한을 허용
-  * 원격 git 저장소 연결
+* 블로그 글은 GitHub(`qofo/qofo.github.io`)가 기기 밖 사본입니다. 서버 코드는 `qofo/phone-homeserver`에 마스킹한 사본을 둡니다.
+* ⚠️ 그 밖의 파일(로그, 자격 증명, 설정)은 **기기 밖 백업이 없습니다.** 필요하면 폰에서 `termux-setup-storage`를 실행해 저장소 권한을 허용하십시오.
 * 현재 `/storage/emulated/0`은 권한 거부 상태라 `cp … /storage/emulated/0/Download/`는 실패합니다.
 
 ---
@@ -273,13 +277,19 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | **패키지 설치** | `apt-get update && apt-get install -y <패키지명>` (sudo 불필요) |
 | **메모리/스토리지 점검** | `free -m && df -h /` |
 | **Tailscale IP** | `100.x.y.z` |
-| **블로그 새 글 추가** | `/posts/09_제목.md` 생성 (웹에서 즉시 자동 색인) → `/posts`에서 커밋 |
+| **블로그 새 글 추가** | `/root/qofo.github.io/content/posts/09-<slug>.md` 작성(앞 글의 front matter 참고) → 커밋 → `/root/publish_blog.sh publish` (폰 교체 + push → Actions가 Pages 배포) |
+| **폰에서만 미리 보기** | `/root/publish_blog.sh phone` (커밋 안 한 변경도 빌드, 재시작 불필요) |
+| **블로그 배포 상태** | `/root/publish_blog.sh status`, `gh run list --repo qofo/qofo.github.io -L 3` |
+| **블로그 서버 시험** | `python3 /root/tests/test_serve_blog.py` (35개) |
 
 ---
 
 ## 🚧 10. 알려진 한계
 
 * ngrok 무료 플랜의 브라우저 경고 페이지는 로컬 설정으로 없앨 수 없습니다. 유료 플랜이나 자체 도메인(Cloudflare Named Tunnel 등)이 필요합니다.
+  * GitHub Pages의 대시보드는 `ngrok-skip-browser-warning` 헤더를 붙여 경고 페이지를 피합니다. 이 헤더 때문에 브라우저가 CORS preflight(OPTIONS)를 보내고, `serve_blog.py`가 204로 답합니다. OPTIONS 처리를 지우면 Pages의 대시보드가 멈춥니다.
+  * ngrok 무료 플랜은 요청 수를 셉니다. 그래서 Pages 방문자는 홈 30초, 대시보드 5초 간격으로만 요청하고, 탭이 숨겨지면 멈춥니다(`hugo.toml`의 `pollHome`, `pollDashboard`).
+* 폰의 Ubuntu에는 tzdata가 없어서 Hugo 설정에 `timeZone`을 넣으면 폰 빌드가 실패합니다.
 * 15분 주기 감시 작업은 Doze 중에 지연될 수 있습니다. Termux와 Termux:API 앱의 **배터리 최적화 해제**를 권장합니다.
 * 감시 작업(4241)과 기동 요청(4242)은 인터넷 연결이 확인된 상태에서만 실행됩니다.
 * 블로그 5편의 코드 예시는 v1 구조(`pgrep -f "serve_blog.py"` 기반 자동 시작) 기준이라 현재 구현과 다릅니다.
