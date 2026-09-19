@@ -1,0 +1,7 @@
+# Runtime state, logs and local config stay out
+*.log
+*.pid
+*.lock
+*.state
+__pycache__/
+private_docs.list
