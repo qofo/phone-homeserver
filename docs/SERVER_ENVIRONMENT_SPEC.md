@@ -223,7 +223,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/termux/ensure-code-server.sh` | Termux 쪽 런처 |
 | `/root/.config/code-server/config.yaml` | 비밀번호 등 설정. **내용을 출력하지 말 것** |
 | `/root/.config/code-server/tls/` | `ca.key`·`server.key`(600, 비밀), `ca.crt`(사용자 기기에 등록), `server.crt` |
-| `/root/.local/share/code-server/User/settings.json` | inotify 한도(4096)에 맞춘 감시·검색 제외, 텔레메트리·자동 업데이트 끔 |
+| `/root/.local/share/code-server/User/settings.json` | 캐시·설치 폴더를 파일 감시·검색에서 제외(아래 inotify 항목), 텔레메트리·자동 업데이트 끔 |
 | `/root/code_server.log` (KST + code-server 자체 로그) | 2MB 초과 시 `.1`로 순환 |
 | `/root/.code_server.state`, `.code_server.pid`, `.code_server.lock` | 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
 | `/root/.code_server_disabled`, `.code_server_restart` | 자동 시작 중지 플래그, `restart` 플래그 |

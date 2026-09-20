@@ -109,7 +109,8 @@ Firefox는 자체 저장소를 씁니다: 설정 → 개인정보 및 보안 →
 
 `/root/.local/share/code-server/User/settings.json`
 
-- 이 폰의 inotify 감시 한도는 **4096개**이고 `/root`의 폴더는 약 3400개입니다. 대부분 캐시와 설치 파일(`.local` 1237개, `.gemini` 835개, `.npm` 443개 등)이라 파일 감시와 검색에서 뺐습니다. 빼고 나면 약 30개가 남습니다.
+- `/root`의 폴더는 약 3400개이고 대부분 캐시와 설치 파일(`.local` 1237개, `.gemini` 835개, `.npm` 443개 등)입니다. 파일 감시와 검색에서 뺐고, 빼고 나면 약 30개가 남습니다.
+  - proot 안에서 보이는 inotify 한도(`/proc/sys/fs/inotify/max_user_watches`의 4096)는 **proot-distro가 붙인 가짜 파일**입니다. `sysctl`로 고쳐도 그 파일만 바뀝니다. 실제 여유는 `inotify_add_watch`로 재서 5862개였습니다(다른 프로세스가 쓰는 몫은 제외한 값).
 - 텔레메트리, 업데이트 확인, git 자동 fetch를 껐습니다.
 - 로그인한 사람만 쓰는 편집기이므로 "제한 모드(Workspace Trust)" 확인 창을 껐습니다.
 
