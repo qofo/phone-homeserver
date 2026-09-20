@@ -46,7 +46,9 @@ hugo_build() {
     [ -f "$out/index.html" ] || { rm -rf "$out"; die "build has no index.html; nothing was published"; }
     local sources built
     sources=$(find "$SRC/content/posts" -name '*.md' ! -name '_index.md' | wc -l)
-    built=$(find "$out/posts" -mindepth 2 -name index.html | wc -l)
+    # -path '*/page/*' skips posts/page/N/, the paginator's own pages: the theme's list
+    # template paginates the section, and those are not posts.
+    built=$(find "$out/posts" -mindepth 2 -name index.html -not -path '*/page/*' | wc -l)
     # Hugo skips drafts and future-dated posts without an error
     [ "$sources" = "$built" ] || say "[warn]  $sources post files but $built built (draft or future date?)"
     BUILT_POSTS=$built
