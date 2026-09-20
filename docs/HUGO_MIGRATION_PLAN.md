@@ -32,6 +32,7 @@
 - 전환 재시작 중단 12초. ngrok 주소에서 preflight 204, `/api/metrics` 200, 글·태그·RSS 200.
 - GitHub Pages: 소스를 `gh-pages`로 바꾼 뒤 빌드 요청(API)으로 첫 배포. 사이트를 크롤링해 내부 링크 89개 모두 200.
 - 소스 전환만으로는 Pages가 다시 빌드하지 않았음. 전환 전에 push한 `gh-pages`와 전환 뒤 push한 `main`은 둘 다 빌드를 일으키지 않아, `POST /repos/qofo/qofo.github.io/pages/builds`로 요청했음.
+- 2026-09-20: 사용자 판단으로 **Pages 사본에서 대시보드와 홈의 수치 표시를 뺐습니다.** 공개 사이트를 여는 사람마다 폰을 호출하는 구조가 맞지 않다는 이유입니다. 대시보드 원본은 `content-phone/`으로 옮겨 폰 빌드에서만 마운트합니다. 7장의 교차 출처 호출과 5장의 preflight 대응은 이제 폰 사본에서는 쓰이지 않지만, 서버 쪽 CORS·OPTIONS 응답은 남겨 두었습니다.
 - 옛 SPA로 돌아가려면: `git -C /root checkout pre-hugo -- serve_blog.py && /root/start_services.sh restart` (옛 SPA는 `/posts`를 읽음).
 
 ---

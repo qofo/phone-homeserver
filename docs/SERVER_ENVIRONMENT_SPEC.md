@@ -15,7 +15,7 @@
 
 이 위에서 **기술 블로그 + 실시간 하드웨어 대시보드**(`serve_blog.py`, 포트 8080)가 돌고, **ngrok 고정 도메인**으로 외부에 공개됩니다. 두 서비스는 Termux 쪽에서 띄운 **감시 데몬**이 관리합니다(5장).
 
-블로그는 Hugo 사이트(`/root/qofo.github.io`)이고, 같은 원본을 **폰과 GitHub Pages(`https://qofo.github.io/`) 두 곳**에서 서비스합니다. 폰은 자기가 빌드한 정적 파일을 보내고, 대시보드 수치(`/api/metrics`)는 어느 쪽에서 열어도 폰에서 옵니다(5장 관련 파일, 10장).
+블로그는 Hugo 사이트(`/root/qofo.github.io`)이고, 같은 원본을 **폰과 GitHub Pages(`https://qofo.github.io/`) 두 곳**에서 서비스합니다. 폰은 자기가 빌드한 정적 파일을 보냅니다. **실시간 대시보드는 폰 사본에만 있습니다**(2026-09-20 결정). 공개 사이트를 여는 사람마다 폰을 호출하는 구조가 맞지 않아서, Pages 빌드에서는 대시보드 페이지와 홈의 수치 표시를 뺐습니다. 원본은 `content-phone/`에 있고 폰 빌드에서만 마운트됩니다(5장 관련 파일, 10장).
 
 일반적인 리눅스 서버 상식(systemd, Docker, root 권한, 포트포워딩 등)이 그대로 적용되지 않으므로, **이 문서의 제약사항과 규칙**을 숙지한 상태에서 명령어를 실행해야 합니다.
 
@@ -319,8 +319,8 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 ## 🚧 10. 알려진 한계
 
 * ngrok 무료 플랜의 브라우저 경고 페이지는 로컬 설정으로 없앨 수 없습니다. 유료 플랜이나 자체 도메인(Cloudflare Named Tunnel 등)이 필요합니다.
-  * GitHub Pages의 대시보드는 `ngrok-skip-browser-warning` 헤더를 붙여 경고 페이지를 피합니다. 이 헤더 때문에 브라우저가 CORS preflight(OPTIONS)를 보내고, `serve_blog.py`가 204로 답합니다. OPTIONS 처리를 지우면 Pages의 대시보드가 멈춥니다.
-  * ngrok 무료 플랜은 요청 수를 셉니다. 그래서 Pages 방문자는 홈 30초, 대시보드 5초 간격으로만 요청하고, 탭이 숨겨지면 멈춥니다(`hugo.toml`의 `pollHome`, `pollDashboard`).
+  * 대시보드를 폰 사본으로 한정한 뒤로 공개 사이트가 폰을 호출하는 경로는 없습니다. `serve_blog.py`의 CORS 헤더와 OPTIONS 응답은 남겨 두었습니다(시험이 지키는 동작이고, 다른 곳에서 수치를 쓸 여지를 남겼습니다).
+  * ngrok 무료 플랜은 요청 수를 셉니다(월 20,000건). 폰 주소로 들어와 대시보드를 열면 3초마다 요청이 나가므로, 오래 열어 두지 마십시오(`config/phone/hugo.toml`의 `pollHome`, `pollDashboard`).
 * 폰의 Ubuntu에는 tzdata가 없어서 Hugo 설정에 `timeZone`을 넣으면 폰 빌드가 실패합니다.
 * Pages 빌드는 GitHub Actions가 아니라 폰에서 합니다. git이 쓰는 토큰(classic, `repo` 권한)에 `workflow` 권한이 없어 `.github/workflows/`를 push할 수 없기 때문입니다. 그래서 GitHub 웹에서 글을 고치면 Pages에 반영되지 않고, 폰에서 `publish_blog.sh publish`를 실행해야 합니다.
 * 15분 주기 감시 작업은 Doze 중에 지연될 수 있습니다. Termux와 Termux:API 앱의 **배터리 최적화 해제**를 권장합니다.
