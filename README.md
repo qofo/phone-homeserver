@@ -1,81 +1,268 @@
-# phone-homeserver
+<h1 align="center">phone-homeserver</h1>
 
-서랍 속 갤럭시 노트 FE(Android 9)에 우분투를 올리고, 그 위에서 블로그와 대시보드를 24시간 돌리는 개인 서버의 코드와 운영 문서다. 앱 하나 없이 파이썬 표준 라이브러리와 셸 스크립트만 쓴다.
+<p align="center">
+  A 2017 Android phone, no root and no cloud host — running a public blog,<br>
+  a private document viewer and a browser IDE, 24 hours a day.
+</p>
 
-이 저장소는 기술 블로그 연재의 실물이다. 글은 [`qofo/qofo.github.io`](https://github.com/qofo/qofo.github.io)에 있다.
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <img alt="Platform: Android 9+" src="https://img.shields.io/badge/platform-Android%209%2B-3ddc84.svg">
+  <img alt="No root required" src="https://img.shields.io/badge/root-not%20required-2da44e.svg">
+  <img alt="Ubuntu 26.04 via proot-distro" src="https://img.shields.io/badge/Ubuntu-26.04%20(proot--distro)-E95420.svg">
+  <img alt="Python standard library only" src="https://img.shields.io/badge/Python-stdlib%20only-3776AB.svg">
+</p>
 
-## 구조
+<p align="center">
+  <b>English</b> · <a href="README.ko.md">한국어</a>
+</p>
 
-```
-Android 9
-└─ Termux (앱)
-   ├─ Termux:Boot / termux-job-scheduler   ← 부팅 때와 15분마다 감독 스크립트를 되살림
-   └─ proot-distro: Ubuntu 26.04 (aarch64)
-      ├─ start_services.sh      공개 서비스의 감독자 (블로그 + ngrok)
-      │   ├─ serve_blog.py      Hugo로 빌드한 블로그 + 실시간 대시보드 API (:8080)
-      │   └─ ngrok              고정 도메인으로 공개
-      ├─ private_docs.sh        내부 문서 서버의 감독자 (별도)
-      │   └─ private_docs_server.py   Tailscale 안에서만 열리는 마크다운 뷰어 (:8081)
-      └─ code_server.sh         code-server의 감독자 (별도)
-          └─ code-server        Tailscale 안에서만 열리는 브라우저용 VS Code (:8443, HTTPS)
-```
+---
 
-블로그 글과 Hugo 사이트는 [`qofo/qofo.github.io`](https://github.com/qofo/qofo.github.io)에 있다. 같은 원본을 GitHub Pages와 이 폰이 각각 빌드해서 서비스하고, 대시보드 수치는 어느 쪽에서 열어도 폰의 `/api/metrics`에서 온다.
+This is the working setup of one phone, not a tutorial written from memory. Every
+command here ran on a Samsung Galaxy Note FE (`SM-N935L`) that has been serving
+[qofo.github.io](https://qofo.github.io/) since 2026-09-17, and every number in the
+documentation comes from its own logs.
 
-proot는 `--kill-on-exit`로 실행되므로 로그인 세션에서 띄운 프로세스는 세션이 끝나면 함께 죽는다. 그래서 감독자는 항상 Termux 쪽 런처(`termux/`)가 `setsid`로 proot 바깥에서 낳는다. 이 제약과 나머지 함정은 블로그 3편과 5편에 있다.
+![Layer stack of the phone server](docs/images/architecture.svg)
 
-## 파일
+## Why an old phone
 
-| 경로 | 역할 |
-|---|---|
-| `serve_blog.py` | `/root/blog_public`의 Hugo 빌드를 정적으로 보내고, `/api/metrics`를 제공한다(CORS preflight 포함) |
-| `publish_blog.sh` | 블로그 원본(`qofo.github.io`)을 폰용으로 빌드해 무중단 교체하고, `publish`면 GitHub에도 push한다 |
-| `start_services.sh` | 공개 서비스 감독자. `start` `stop` `restart` `status` `start-daemon` |
-| `measure_downtime.py` | 재시작 중 공개 주소의 중단 시간을 0.2초 간격으로 잰다 |
-| `private_docs_server.py` | Tailscale 전용 문서 뷰어. 허용 목록에 있는 마크다운만 서빙한다 |
-| `private_docs.sh` | 문서 서버 감독자. 같은 다섯 개 명령 |
-| `private_docs.list.example` | 문서 허용 목록의 예시 |
-| `code_server.sh` | code-server 감독자. Tailscale 주소 탐지, 이름 제약 개인 CA로 인증서 발급·갱신, 같은 다섯 개 명령 |
-| `termux/battery-watch.sh` | 배터리 감시. 충전 중 80% 이상이면 빼라고, 방전 중 30% 이하면 꽂으라고 알리고(Termux:API), 잔량·전류·전압을 기록한다 |
-| `private_docs_static/` | 뷰어의 정적 파일 (marked, DOMPurify 포함) |
-| `termux/` | Termux 쪽 런처. proot 바깥에서 감독자를 낳는다 |
-| `tests/test_private_docs.py` | 문서 서버의 블랙박스 보안 테스트 47개 |
-| `tests/test_serve_blog.py` | 블로그 서버의 블랙박스 테스트 35개 (경로 조작, 리디렉트, 캐시, CORS, 빌드 교체) |
-| `docs/` | 서버 환경 명세, code-server 사용 안내, 부하 시험 기록, Hugo 이전 계획 (IP는 예시 값으로 바꿈) |
+A phone you already own is a better first server than a single-board computer, on
+four counts: it costs nothing, it draws under 5 W, it has a battery that doubles as
+an uninterruptible power supply, and it has a screen for when networking breaks.
+A Galaxy Note FE beats a Raspberry Pi 3 on CPU and RAM.
 
-## 설정
+What you give up is a normal Linux. There is no root, no `systemd`, no Docker, no
+firewall, and `/proc` lies to you. Those constraints shape every script in this
+repository, and [`docs/04-always-on.md`](docs/04-always-on.md) explains each one.
 
-경로는 `/root` 기준으로 고정돼 있다. 옮겨 쓰려면 다음을 바꾼다.
+![what a 2017 phone actually gives you](docs/images/term-specs.svg)
 
-- `start_services.sh`의 `NGROK_DOMAIN`, `measure_downtime.py`의 `DEFAULT_PUBLIC_URL`: 본인의 ngrok 고정 도메인
-- `publish_blog.sh`의 `SRC`(블로그 저장소 경로)와 저장소 이름, `serve_blog.py`의 `BLOG_SITE_DIR`(환경변수로도 바꿀 수 있다)
-- ngrok authtoken은 `~/.config/ngrok/ngrok.yml`에 둔다. **저장소에 넣지 않는다.**
-- 문서 서버: `cp private_docs.list.example private_docs.list` 후 보여 줄 파일을 한 줄에 하나씩 적는다. 목록에 없는 파일은 URL을 알아도 열리지 않는다.
-- 문서 서버는 Tailscale 인터페이스의 주소에만 바인딩한다. 환경변수는 `PRIVATE_DOCS_BIND`, `PRIVATE_DOCS_PORT`, `PRIVATE_DOCS_ALLOW`, `PRIVATE_DOCS_LIST`, `PRIVATE_DOCS_STATE`.
+## What you get
 
-## 실행과 시험
+| Service | Address | Reachable from | Built with |
+|:---|:---|:---|:---|
+| **Blog** — Hugo site + live hardware dashboard | `:8080` behind an ngrok domain | the public internet | `serve_blog.py`, Python stdlib |
+| **Private docs** — markdown viewer over an allow-list | `:8081` | your tailnet only | `private_docs_server.py`, Python stdlib |
+| **code-server** — VS Code in the browser, HTTPS | `:8443` | your tailnet only | code-server + a local CA |
+
+Each service has its own supervisor that restarts it within ten seconds, survives a
+reboot, and keeps running after you close the terminal.
+
+## Requirements
+
+**Hardware**
+
+- An Android phone, **arm64 (`aarch64`)**, Android 7 or newer. Root is not needed.
+- **2 GB RAM** is enough for the blog alone; **3 GB+** if you also want code-server.
+- **8 GB** free storage for the Ubuntu rootfs, Hugo and code-server.
+- A charger you can leave plugged in, and ideally a case you can leave open — a
+  fanless phone under load gets warm.
+
+**Apps** — all free, none from the Play Store except Tailscale.
+
+| App | Where to get it | What it is for |
+|:---|:---|:---|
+| **Termux** | [F-Droid](https://f-droid.org/en/packages/com.termux/) — **not** the Play Store build, which is abandoned | the Linux shell everything runs in |
+| **Termux:Boot** | [F-Droid](https://f-droid.org/en/packages/com.termux.boot/) | starts the server after a reboot |
+| **Termux:API** | [F-Droid](https://f-droid.org/en/packages/com.termux.api/) | battery, temperature and notifications |
+| **Tailscale** | [Play Store](https://play.google.com/store/apps/details?id=com.tailscale.ipn) | the private network for `:8081` and `:8443` |
+| **ngrok account** | [ngrok.com](https://ngrok.com) (free) | one permanent public HTTPS address |
+
+Install all three Termux apps from F-Droid in one go. Mixing F-Droid and Play Store
+builds of Termux breaks the add-ons, because Android refuses to let apps with
+different signing keys talk to each other.
+
+## Quick start
+
+Six steps. The detail behind each one is in [Documentation](#documentation).
+
+### 1. Get a Linux shell
 
 ```bash
-./start_services.sh status        # 공개 서비스
-./private_docs.sh status          # 내부 문서 서버
-./code_server.sh status           # code-server
-python3 tests/test_private_docs.py
-python3 tests/test_serve_blog.py
-./publish_blog.sh status          # 폰 사본과 Pages가 어느 커밋을 서비스하는지
+pkg update && pkg upgrade -y
+pkg install proot-distro termux-api openssh
+proot-distro install ubuntu
+proot-distro login ubuntu
 ```
 
-테스트는 임시 디렉터리와 자체 포트만 쓰므로 실행 중인 서비스에 영향을 주지 않는다.
+Inside Ubuntu, fix the certificate bundle before anything else. A minimal rootfs
+ships without a usable one, and every HTTPS call fails until you do.
 
-## 보안 메모
+```bash
+apt-get update && apt-get install --reinstall ca-certificates
+apt-get install -y python3 git curl hugo
+```
 
-- 문서 서버를 `0.0.0.0`에 바인딩하지 않는다. 바인딩 주소가 곧 방화벽이다. 자세한 방어 계층은 8편에 있다.
-- 이 저장소에는 토큰, 키, 실제 공인 IP를 넣지 않는다. `docs/`의 IP는 예시 값(`192.168.0.42`, `100.x.y.z`)이다.
+![Termux — from a bare app to an Ubuntu shell](docs/images/term-install.svg)
 
-## 라이선스
+### 2. Put the files on the phone
 
-이 저장소의 코드와 문서는 [MIT](LICENSE)다. `private_docs_static/`에 들어 있는 서드파티 파일은 각자의 라이선스를 따른다.
+```bash
+cd /root
+git clone https://github.com/qofo/phone-homeserver.git
+cp phone-homeserver/*.py phone-homeserver/*.sh /root/
+cp -r phone-homeserver/tests phone-homeserver/private_docs_static /root/
+mkdir -p /root/termux && cp phone-homeserver/termux/*.sh /root/termux/
+chmod +x /root/*.sh /root/termux/*.sh /root/*.py
+```
 
-| 파일 | 라이선스 |
-|---|---|
+Every script assumes it lives in `/root`. See [Configuration](#configuration) to
+move them.
+
+### 3. Serve something
+
+```bash
+./start_services.sh start
+curl -sI http://127.0.0.1:8080/ | head -1
+```
+
+### 4. Get a permanent public address
+
+Put your token in `~/.config/ngrok/ngrok.yml`, then set `NGROK_DOMAIN` at the top of
+`start_services.sh` to the free static domain ngrok gave you.
+
+```yaml
+version: "3"
+agent:
+  authtoken: <your token>
+```
+
+Of the three ways to get a fixed address without buying a domain, only one worked on
+a phone that moves between networks. [`docs/03-public-address.md`](docs/03-public-address.md)
+compares all three.
+
+### 5. Make it survive a reboot
+
+From the **Termux** shell, not from inside Ubuntu:
+
+```bash
+ROOTFS=$PREFIX/var/lib/proot-distro/containers/ubuntu/rootfs
+mkdir -p ~/.termux/boot
+ln -s $ROOTFS/root/termux/ensure-daemon.sh ~/.termux/boot/start-server.sh
+termux-job-scheduler --job-id 4241 --period-ms 900000 --persisted true \
+    --script $ROOTFS/root/termux/ensure-daemon.sh
+```
+
+This is the one step that has no equivalent on a normal server, and the one that
+took two rewrites to get right. `proot` runs with `--kill-on-exit`, so anything
+started from inside a login session dies with that session. The launcher has to live
+on the Termux side and use `setsid`.
+
+![How a service survives a reboot, a crash and a logout](docs/images/boot-chain.svg)
+
+### 6. Check it from somewhere else
+
+```bash
+./start_services.sh status
+python3 tests/test_serve_blog.py
+```
+
+![the three status commands, on the live phone](docs/images/term-status.svg)
+
+## Repository layout
+
+```
+.
+├── serve_blog.py              public blog + /api/metrics          :8080
+├── start_services.sh          supervisor for the blog and ngrok
+├── publish_blog.sh            build and deploy to the phone and GitHub Pages
+├── measure_downtime.py        measures the outage a restart causes
+├── private_docs_server.py     tailnet-only markdown viewer         :8081
+├── private_docs.sh            supervisor for the docs viewer
+├── private_docs.list.example  the allow-list of files it may serve
+├── code_server.sh             supervisor for code-server, plus its CA and TLS  :8443
+├── private_docs_static/       marked + DOMPurify + the viewer's CSS and JS
+├── termux/                    launchers that must run outside proot
+│   ├── ensure-daemon.sh         blog and ngrok
+│   ├── ensure-private-docs.sh   docs viewer
+│   ├── ensure-code-server.sh    code-server
+│   ├── battery-watch.sh         charge alerts and a battery log
+│   └── claude-session.sh        a tmux session that outlives the SSH connection
+├── tests/
+│   ├── test_serve_blog.py       35 black-box tests
+│   └── test_private_docs.py     47 black-box security tests
+└── docs/                      the guide, in English and Korean
+```
+
+The three supervisors take the same five commands:
+
+```bash
+./start_services.sh   {start|stop|restart|status|start-daemon}
+./private_docs.sh     {start|stop|restart|status|start-daemon}
+./code_server.sh      {start|stop|restart|status|start-daemon}
+```
+
+## Documentation
+
+The README covers the path that gets a server running. Everything else lives here,
+and every page exists in both languages.
+
+| | Document | What it covers |
+|:--|:---|:---|
+| 1 | [Installation](docs/01-install.md) · [한국어](docs/01-install.ko.md) | Termux, `proot-distro`, the CA bundle, SSH, and the binary-compatibility wall that forces all of it |
+| 2 | [Web server](docs/02-web-server.md) · [한국어](docs/02-web-server.ko.md) | a static server on the standard library, Hugo on the phone, and publishing to the phone and GitHub Pages at once |
+| 3 | [A public address](docs/03-public-address.md) · [한국어](docs/03-public-address.ko.md) | Cloudflare Tunnel vs DuckDNS + port forwarding vs an ngrok free domain, and why CGNAT decides for you |
+| 4 | [Staying up](docs/04-always-on.md) · [한국어](docs/04-always-on.ko.md) | `--kill-on-exit`, `setsid`, Termux:Boot, the 15-minute watchdog, and health checks that catch a hung process |
+| 5 | [Private access](docs/05-private-access.md) · [한국어](docs/05-private-access.ko.md) | Tailscale, binding as a firewall, the docs viewer's five defence layers, and code-server over HTTPS |
+| 6 | [Operations](docs/06-operations.md) · [한국어](docs/06-operations.ko.md) | battery and heat, the metrics API, measuring downtime, load testing, and running the test suites |
+| 7 | [Troubleshooting](docs/07-troubleshooting.md) · [한국어](docs/07-troubleshooting.ko.md) | every failure this phone actually produced, indexed by the symptom you will see |
+
+Four longer working documents sit in [`docs/reference/`](docs/reference). They are the
+server's own operating notes — the full environment specification, the code-server
+guide, the Hugo migration plan and a load-test specification. **They are Korean only**,
+because they are internal records rather than part of the guide.
+
+## Configuration
+
+Paths are hard-coded to `/root`. To run this somewhere else, change:
+
+| Setting | Where |
+|:---|:---|
+| your ngrok domain | `NGROK_DOMAIN` in `start_services.sh`, `DEFAULT_PUBLIC_URL` in `measure_downtime.py` |
+| the blog source and build directory | `SRC` in `publish_blog.sh`, `BLOG_SITE_DIR` in `serve_blog.py` (also an environment variable) |
+| which documents the viewer may serve | `cp private_docs.list.example private_docs.list`, then one path per line |
+| the docs viewer's bind address and port | `PRIVATE_DOCS_BIND`, `PRIVATE_DOCS_PORT`, `PRIVATE_DOCS_ALLOW`, `PRIVATE_DOCS_LIST`, `PRIVATE_DOCS_STATE` |
+| your MagicDNS name, for the TLS certificate | `MAGIC_DNS` in `code_server.sh` (empty in this copy on purpose) |
+| the job IDs, if 4241–4246 are taken | `LAUNCH_JOB_ID` in each supervisor |
+
+Your ngrok token belongs in `~/.config/ngrok/ngrok.yml`, never in the repository.
+
+## Security notes
+
+- **Never bind a private service to `0.0.0.0`.** There is no firewall inside `proot`
+  and no root to add one, so the bind address *is* the firewall. `:8081` and `:8443`
+  are bound to the Tailscale address only.
+- The two private services do not share a supervisor with the public one. A bad
+  restart of the blog cannot take them with it, and vice versa.
+- No token, key or real public IP is committed here. Addresses in `docs/` are
+  examples: `192.168.0.42`, `100.x.y.z`, `203.0.113.10`.
+- `tests/test_private_docs.py` is a black-box security suite — path traversal,
+  symlink escape, `Host` header, rebinding, allow-list bypass. Run it after any
+  change to the viewer.
+
+![Public path versus tailnet-only path](docs/images/network-paths.svg)
+
+## The blog series
+
+Each design decision here was written up as it happened. The posts carry the failures
+and the logs that the documentation only summarises. They are in Korean, at
+[qofo.github.io](https://qofo.github.io/) — source in
+[`qofo/qofo.github.io`](https://github.com/qofo/qofo.github.io).
+
+## Read this in other languages
+
+Korean: **[한국어 문서](README.ko.md)**. Translations are welcome — open a pull
+request adding `README.<lang>.md` and the matching `docs/*.<lang>.md` pages, and it
+will be linked here.
+
+## License
+
+[MIT](LICENSE) for the code and documentation. Third-party files in
+`private_docs_static/` keep their own licences.
+
+| File | License |
+|:---|:---|
 | `marked.umd.min.js` (marked 18.0.13) | MIT |
-| `purify.min.js` (DOMPurify 3.4.15) | Apache-2.0 또는 MPL-2.0 |
+| `purify.min.js` (DOMPurify 3.4.15) | Apache-2.0 or MPL-2.0 |
