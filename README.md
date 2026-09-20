@@ -36,6 +36,7 @@ proot는 `--kill-on-exit`로 실행되므로 로그인 세션에서 띄운 프�
 | `private_docs.sh` | 문서 서버 감독자. 같은 다섯 개 명령 |
 | `private_docs.list.example` | 문서 허용 목록의 예시 |
 | `code_server.sh` | code-server 감독자. Tailscale 주소 탐지, 이름 제약 개인 CA로 인증서 발급·갱신, 같은 다섯 개 명령 |
+| `termux/battery-watch.sh` | 배터리 감시. 충전 중 80% 이상이면 빼라고, 방전 중 30% 이하면 꽂으라고 알리고(Termux:API), 잔량·전류·전압을 기록한다 |
 | `private_docs_static/` | 뷰어의 정적 파일 (marked, DOMPurify 포함) |
 | `termux/` | Termux 쪽 런처. proot 바깥에서 감독자를 낳는다 |
 | `tests/test_private_docs.py` | 문서 서버의 블랙박스 보안 테스트 47개 |

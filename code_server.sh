@@ -17,6 +17,10 @@ CS_BIN="/root/.local/lib/code-server/bin/code-server"
 # Main process and its helpers (extension host, pty host, file watcher) all run this node
 PATTERN='^/root/\.local/lib/code-server[^/ ]*/lib/node '
 PORT=8443
+# MagicDNS name of this device (Tailscale admin console). The certificate carries it
+# beside the Tailscale IP, so the editor can be opened by name even if the IP changes.
+# Leave empty to use the IP only; the CA's name constraints allow any *.ts.net name.
+MAGIC_DNS=""   # e.g. "phone.tailnet-name.ts.net"
 WORKSPACE="/root"
 CONF_DIR="/root/.config/code-server"
 TLS_DIR="$CONF_DIR/tls"
@@ -113,7 +117,10 @@ cert_ok() {
     [ -s "$SRV_CRT" ] && [ -s "$SRV_KEY" ] || return 1
     openssl verify -CAfile "$CA_CRT" "$SRV_CRT" >/dev/null 2>&1 || return 1
     openssl x509 -in "$SRV_CRT" -noout -checkend "$RENEW_BEFORE" >/dev/null 2>&1 || return 1
-    openssl x509 -in "$SRV_CRT" -noout -ext subjectAltName 2>/dev/null | grep -qw "IP Address:$1"
+    local names
+    names=$(openssl x509 -in "$SRV_CRT" -noout -ext subjectAltName 2>/dev/null)
+    grep -qw "IP Address:$1" <<<"$names" || return 1
+    [ -z "$MAGIC_DNS" ] || grep -qw "DNS:$MAGIC_DNS" <<<"$names"
 }
 
 issue_cert() {
@@ -121,7 +128,7 @@ issue_cert() {
     local tmp
     tmp=$(mktemp -d) || return 1
     printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
-        "extendedKeyUsage=serverAuth" "subjectAltName=IP:$1" \
+        "extendedKeyUsage=serverAuth" "subjectAltName=IP:$1${MAGIC_DNS:+,DNS:$MAGIC_DNS}" \
         "subjectKeyIdentifier=hash" "authorityKeyIdentifier=keyid" > "$tmp/ext"
     if ( umask 077 && openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
             -keyout "$tmp/key" -out "$tmp/csr" -subj "/CN=code-server $1" ) >/dev/null 2>&1 \
@@ -131,7 +138,7 @@ issue_cert() {
         && openssl verify -CAfile "$CA_CRT" "$tmp/crt" >/dev/null 2>&1; then
         mv -f "$tmp/key" "$SRV_KEY" && mv -f "$tmp/crt" "$SRV_CRT"
         rm -rf "$tmp"
-        log "[TLS] Issued server certificate for $1 (valid 397 days)"
+        log "[TLS] Issued server certificate for $1${MAGIC_DNS:+ and $MAGIC_DNS} (valid 397 days)"
         return 0
     fi
     rm -rf "$tmp"
@@ -376,6 +383,7 @@ status() {
                 addr=${state#listening }
                 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --cacert "$CA_CRT" "https://$addr/healthz")
                 echo "Server:     [RUNNING] (PID $pid, ${rss:-?} MB) - https://$addr/ (healthz HTTP $code)"
+                [ -z "$MAGIC_DNS" ] || echo "            also https://$MAGIC_DNS:$PORT/ (same certificate)"
                 ;;
             offline\ *)
                 echo "Server:     [OFFLINE] (PID $pid) - bound to ${state#offline }, but Tailscale is down"

@@ -195,6 +195,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/private_docs.list` | 공개할 문서 허용 목록 |
 | `/root/private_docs_static/` | 뷰어 JS/CSS, marked 18.0.13, DOMPurify 3.4.15 |
 | `/root/tests/test_private_docs.py` | 블랙박스 보안 테스트 47개 (`python3 /root/tests/test_private_docs.py`) |
+| `/root/termux/battery-watch.sh` | 배터리 감시(감시 작업 4247, 15분 주기). 충전 중 80% 이상이면 "빼세요", 방전 중 30% 이하면 "꽂으세요" 알림(Termux:API). 매 실행마다 `/root/battery_watch.log`에 잔량·상태·온도·전류·전압을 기록합니다 |
 | `/root/private_docs.log` (KST) | 서버·감시 데몬 로그 (2MB 초과 시 `.1`로 순환). 일반 열람은 기록하지 않고 거부(`[DENY]`)만 남깁니다. |
 | `/root/.private_docs.state`, `.private_docs.pid`, `.private_docs.lock` | 서버 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
 | `/root/.private_docs_disabled`, `.private_docs_restart` | `stop` 시 생성되는 자동 시작 중지 플래그, `restart` 플래그 |
@@ -204,7 +205,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 폰의 파일을 브라우저에서 VS Code로 편집하는 환경입니다. 사용 방법과 인증서 등록은 **`/root/CODE_SERVER_GUIDE.md`**(내부 문서 서버에도 있음)를 보십시오. 블로그·문서 서버와 **감시 데몬·런처·감시 작업을 모두 따로** 둡니다.
 
 * **왜 Remote-SSH가 아닌가**: VS Code Remote-SSH는 Termux의 sshd(8022)로 들어가는데, Termux는 bionic libc라 VS Code Server가 요구하는 glibc/libstdc++가 없습니다(`~/.vscode-server/.cli.*.log`: `does not meet Visual Studio Code Server's prerequisites`). code-server는 glibc가 있는 proot 우분투 안에서 돕니다.
-* **주소**: `https://100.x.y.z:8443/` (Tailscale에 연결된 기기에서만 열림, 비밀번호 로그인)
+* **주소**: `https://<this-device>.<tailnet>.ts.net:8443/` 또는 `https://100.x.y.z:8443/` (Tailscale 전용, 비밀번호 로그인). 서버 인증서에 IP와 MagicDNS 이름이 모두 들어 있습니다.
 * **설치**: `/root/.local/lib/code-server-4.137.0-linux-arm64` (심볼릭 링크 `/root/.local/lib/code-server`), GitHub 릴리스 SHA-256 검증 후 설치. 사용자 데이터·확장은 `/root/.local/share/code-server/`
 * **실행 경로**: Termux:Boot / 감시 작업 **4245**(15분) / `code_server.sh start`(작업 **4246**) → `/root/termux/ensure-code-server.sh` → `proot-distro login ubuntu -- /root/code_server.sh start-daemon` → `code-server --bind-addr <Tailscale IP>:8443 --cert … /root`
 * **감시 데몬**: 15초 주기, 90초 유예 후 `https://<IP>:8443/healthz`를 **우리 CA로 검증하며** 점검, 3회 실패 시 강제 재기동, 재시작 대기 15초→최대 5분, 재시작은 플래그 파일. Tailscale 주소는 감시 데몬이 직접 찾고(SIOCGIFADDR), 없으면 `waiting`, 바뀌면 인증서를 다시 발급해 재기동합니다.
@@ -299,7 +300,8 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | **유지보수로 끄기 / 다시 켜기** | `/root/start_services.sh stop` / `start` |
 | **로그 확인** | `tail -f /root/daemon.log /root/ngrok.log` |
 | **터널 공개 주소 확인** | `curl -s localhost:4040/api/tunnels` |
-| **감시 작업 확인** | `termux-job-scheduler --pending` (4241 = 블로그, 4243 = 내부 문서 서버, 4245 = code-server, 모두 15분 주기) |
+| **감시 작업 확인** | `termux-job-scheduler --pending` (4241 = 블로그, 4243 = 내부 문서 서버, 4245 = code-server, 4247 = 배터리 알림, 모두 15분 주기) |
+| **배터리 기록 보기** | `tail /root/battery_watch.log` (잔량·전류·전압. 방전 구간의 `mA`×`mV`가 실제 소비 전력입니다) |
 | **code-server 상태** | `/root/code_server.sh status` (주소: `https://100.x.y.z:8443/`, Tailscale 전용, 안내: `CODE_SERVER_GUIDE.md`) |
 | **내부 문서 서버 상태** | `/root/private_docs.sh status` (주소: `http://100.x.y.z:8081/`, Tailscale 전용) |
 | **내부 문서 추가/제외** | `/root/private_docs.list`에 파일 경로를 한 줄 추가/삭제 (재시작 불필요) |

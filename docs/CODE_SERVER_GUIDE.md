@@ -10,7 +10,7 @@
 
 | 항목 | 값 |
 |:---|:---|
-| 주소 | **`https://100.x.y.z:8443/`** (Tailscale에 연결된 기기에서만 열림) |
+| 주소 | **`https://<this-device>.<tailnet>.ts.net:8443/`** 또는 `https://100.x.y.z:8443/` (Tailscale에 연결된 기기에서만 열림) |
 | 로그인 | 비밀번호 (아래 3절) |
 | 열리는 폴더 | `/root` (블로그 원본은 `/root/qofo.github.io`) |
 | 터미널 | 편집기 안의 터미널(`` Ctrl+` ``)은 **proot 우분투의 bash**입니다 |
@@ -57,6 +57,7 @@ CA 인증서에는 **이름 제약(Name Constraints)**이 걸려 있습니다. �
 | 인증서에 적은 이름 | 검증 결과 |
 |:---|:---|
 | `IP:100.x.y.z` (이 폰의 Tailscale 주소) | 통과 |
+| `DNS:<this-device>.<tailnet>.ts.net` (이 폰의 MagicDNS 이름) | 통과 |
 | `DNS:phone.tail1234.ts.net` | 통과 |
 | `IP:192.168.0.42` (LAN 주소) | **거부** |
 | `DNS:example.com` | **거부** |
@@ -70,7 +71,7 @@ SHA-256 <code_server.sh status가 보여 주는 값>
 
 ### ① CA 파일 받기
 
-1. 브라우저로 `https://100.x.y.z:8443/`을 엽니다. 경고가 뜨면 "고급 → 계속"으로 넘어갑니다(이 한 번만).
+1. 브라우저로 `https://<this-device>.<tailnet>.ts.net:8443/`을 엽니다. 경고가 뜨면 "고급 → 계속"으로 넘어갑니다(이 한 번만).
 2. 비밀번호로 로그인합니다.
 3. 왼쪽 탐색기에서 `.config/code-server/tls/ca.crt`를 **우클릭 → 다운로드**합니다.
    - `ca.key`, `server.key`는 **받지 않습니다.** 비밀 키입니다.
@@ -141,6 +142,7 @@ DNS 리바인딩(남의 웹페이지가 내 브라우저를 통해 tailnet 주�
 
 - 감시 데몬은 블로그(`start_services.sh`), 문서 서버(`private_docs.sh`)와 **완전히 따로** 돕니다. 감시 작업은 4245(15분 주기), 기동 요청은 4246입니다.
 - 부팅 때 Termux:Boot(`~/.termux/boot/start-server.sh`)가 런처 `termux/ensure-code-server.sh`를 실행합니다.
+- 서버 인증서에는 Tailscale IP와 MagicDNS 이름이 함께 들어 있습니다(`code_server.sh`의 `MAGIC_DNS`). 이름으로 접속하면 IP가 바뀌어도 주소가 그대로입니다.
 - Tailscale 주소가 없으면 기다리고(`WAITING`), 주소가 바뀌면 새 주소로 인증서를 다시 발급하고 다시 띄웁니다. 서버 인증서는 397일짜리이고 만료 30일 전에 자동으로 갱신됩니다. CA는 2036년까지 유효하므로 기기에 다시 등록할 일은 없습니다.
 - 복구 시험 결과 (2026-09-20):
   - 바깥 프로세스 `kill -9` → 2초 만에 감지, 즉시 재기동
