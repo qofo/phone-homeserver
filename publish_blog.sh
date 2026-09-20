@@ -22,6 +22,7 @@ LOCAL=http://127.0.0.1:8080
 PAGES_URL=https://qofo.github.io/
 PAGES_BRANCH=gh-pages
 PAGES_CHANGED=0
+PAGES_SHA=""
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -111,7 +112,58 @@ build_pages() {
     commit=$(git_src commit-tree "$tree" ${parent:+-p "$parent"} \
              -m "Build $rev: $(git_src log -1 --format=%s HEAD)" -m "Built from main with hugo --minify ($BUILT_POSTS posts).")
     git_src update-ref "refs/heads/$PAGES_BRANCH" "$commit"
+    PAGES_SHA=$commit
     say "[pages] $PAGES_BRANCH -> $(git_src rev-parse --short "$commit") ($BUILT_POSTS posts), not pushed yet"
+}
+
+# Pushing to gh-pages does not reliably start a Pages build: it did for one release and
+# not for the next (waited 8 minutes). So wait a little, then ask for a build over the
+# API with the same token git uses, and report what GitHub did with it.
+await_pages_build() {
+    PAGES_SHA="$1" python3 - <<'PYEOF'
+import json, os, re, time, urllib.error, urllib.request
+
+REPO = "qofo/qofo.github.io"
+sha = os.environ["PAGES_SHA"][:7]
+token = re.match(r"https://[^:]+:([^@]+)@", open("/root/.git-credentials").read().strip()).group(1)
+headers = {"Authorization": f"token {token}", "User-Agent": "publish_blog", "Accept": "application/vnd.github+json"}
+
+def api(path, method="GET"):
+    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}{path}",
+                                 data=b"" if method == "POST" else None, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        return e.code, {"message": e.read().decode(errors="replace")[:200]}
+    except OSError as e:
+        return 0, {"message": str(e)}
+
+def latest():
+    code, body = api("/pages/builds/latest")
+    return (body.get("status"), (body.get("commit") or "")[:7]) if code == 200 else (None, None)
+
+for _ in range(6):          # up to a minute in case GitHub starts one by itself
+    if latest()[1] == sha:
+        break
+    time.sleep(10)
+else:
+    code, body = api("/pages/builds", "POST")
+    if code != 201:
+        print(f"[pages] could not request a build (HTTP {code}: {body.get('message', '')})")
+        print(f"[pages] ask for one with: gh api -X POST repos/{REPO}/pages/builds")
+        raise SystemExit(0)
+    print("[pages] no build started on its own; requested one")
+
+for _ in range(30):         # then up to five minutes for it to finish
+    status, commit = latest()
+    if commit == sha and status in ("built", "errored"):
+        where = "https://qofo.github.io/" if status == "built" else "check the repository settings"
+        print(f"[pages] build {status} for {commit} -> {where}")
+        raise SystemExit(0)
+    time.sleep(10)
+print(f"[pages] still building; check: gh api repos/{REPO}/pages/builds/latest --jq .status")
+PYEOF
 }
 
 push_both() {
@@ -121,8 +173,7 @@ push_both() {
     say "[push]  origin main $PAGES_BRANCH"
     git_src push --atomic origin main "$PAGES_BRANCH"
     if [ "$PAGES_CHANGED" = 1 ]; then
-        say "[pages] GitHub rebuilds $PAGES_URL from $PAGES_BRANCH in about a minute"
-        say "        check: gh api repos/qofo/qofo.github.io/pages/builds/latest --jq .status"
+        await_pages_build "$PAGES_SHA"
     else
         say "[pages] site unchanged; $PAGES_URL keeps its current build"
     fi
