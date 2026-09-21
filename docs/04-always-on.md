@@ -122,6 +122,10 @@ killer: Android itself re-runs the launcher every fifteen minutes, whether or no
 Termux is in memory. `--persisted true` keeps the job across reboots. Fifteen minutes
 is the platform's floor for a periodic job — asking for less silently gets you fifteen.
 
+All four jobs, as Android reports them:
+
+![termux-job-scheduler -p, listing the four persisted jobs](images/shot-jobs.jpg)
+
 Each service has its own launcher and its own job ID, so one restarting cannot disturb
 another:
 

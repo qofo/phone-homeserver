@@ -28,32 +28,35 @@ python3 docs/images/make_assets.py
 **사진과 스크린샷** — 이것은 만들어 낼 수 없다. 아래는 문서에 자리를 비워 둔 목록이다.
 각 줄에 쓸 파일명이 적혀 있으니, 파일을 이 디렉터리에 넣고 한 줄을 붙이면 끝난다.
 
-## 필요한 사진
+## 이미 들어온 것
+
+| 파일 | 담긴 내용 | 쓰이는 곳 |
+|:---|:---|:---|
+| `shot-blog-home.png` | 고정 공개 주소로 열린 블로그 | README, "무엇이 돌아가는가" |
+| `shot-dashboard.png` | 실시간 대시보드. 코어별 사용률, 메모리, 스왑, 배터리, 온도 | `06-operations` 6.3절 |
+| `shot-battery-alert.jpg` | 80% 충전기 분리 알림. Termux 웨이크 락, Tailscale 연결과 나란히 | `06-operations` 6.1절 |
+| `shot-jobs.jpg` | 등록된 작업 네 개가 모두 보이는 `termux-job-scheduler -p` 출력 | `04-always-on` 4.3절 |
+
+## 아직 필요한 사진
+
+신경 써서 찍을 가치가 있는 것은 첫 번째 하나다. 전제가 사실임을 보여 주는 유일한 이미지다.
+이 저장소의 나머지는 빌린 VPS에서 돌려도 똑같아 보인다. 그리고 GitHub은 저장소가 공유될 때
+README의 첫 이미지를 링크 미리보기로 쓴다.
 
 | 파일명 | 담을 내용 | 들어갈 곳 |
 |:---|:---|:---|
-| `photo-phone-server.jpg` | 일하고 있는 폰. 충전기를 꽂고, 세워 두고, 화면에는 대시보드나 Termux 세션. 가로로, 정면에서. **README 맨 위에 들어갈 사진이다.** | README, 제목 아래 |
-| `photo-setup-wide.jpg` | 더 넓은 배치 — 충전기, 케이블, 놓아 둔 자리. 공간과 장비가 얼마나 적게 드는지 보여 준다 | README, "왜 서랍 속 폰인가" |
-| `photo-case-off.jpg` | 뒷판을 벗긴 폰. 발열 대책 그 자체다 | `06-operations` 6.2절 |
+| `photo-phone-server.jpg` | 일하고 있는 폰. 충전기를 꽂고, 세워 두고, 화면에는 대시보드나 Termux 세션. 가로로, 정면에서 | README, 제목 아래 |
+| `photo-case-off.jpg` | *선택* — 뒷판을 벗긴 폰. 발열 대책 그 자체다 | `06-operations` 6.2절 |
 
-## 필요한 폰 스크린샷
+## 아직 필요한 스크린샷
 
 | 파일명 | 담을 내용 | 들어갈 곳 |
 |:---|:---|:---|
-| `shot-termux-ubuntu.png` | `proot-distro login ubuntu` 직후의 Termux, `cat /etc/os-release`가 보이게 | `01-install` 1.4절 |
+| `shot-termux-ubuntu.png` | `proot-distro login ubuntu` 직후의 Termux. `cat /etc/os-release` 출력이 화면에 있어야 한다. 빈 프롬프트는 아무것도 보여 주지 못한다 | `01-install` 1.4절 |
+| `shot-code-server.png` | 파일을 실제로 열고 터미널 패널에 출력이 있는 code-server. 로딩 중 화면이 아니라 | `05-private-access` 5.7절 |
+| `shot-tailscale-app.png` | 이 폰이 연결된 Tailscale 앱. **먼저 마스킹해야 한다** — 아래를 본다 | `05-private-access` 5.2절 |
+| `shot-docs-viewer.png` | 비공개 문서 뷰어. **먼저 마스킹해야 한다** — 아래를 본다 | `05-private-access` 5.4절 |
 | `shot-android-battery-opt.png` | Termux의 배터리 최적화가 **해제**된 안드로이드 설정 화면 | `01-install` 1.1절 |
-| `shot-battery-alert.png` | 80%에서 충전기를 빼라고 알리는 Termux:API 알림 | `06-operations` 6.1절 |
-| `shot-tailscale-app.png` | 이 폰이 연결된 Tailscale 앱 화면, `100.x` 주소가 보이게 | `05-private-access` 5.2절 |
-| `shot-jobs.png` | `termux-job-scheduler -p` 출력, 등록된 작업 목록 | `04-always-on` 4.3절 |
-
-## 필요한 노트북 브라우저 스크린샷
-
-| 파일명 | 담을 내용 | 들어갈 곳 |
-|:---|:---|:---|
-| `shot-blog-home.png` | 공개 주소를 통해 폰에서 받아 온 블로그. 주소창이 보이게 | README, "무엇이 돌아가는가" |
-| `shot-dashboard.png` | 실제 수치가 찍힌 실시간 하드웨어 대시보드 | `06-operations` 6.3절 |
-| `shot-docs-viewer.png` | 문서를 하나 연 비공개 문서 뷰어 | `05-private-access` 5.4절 |
-| `shot-code-server.png` | 브라우저의 code-server. 자물쇠 표시와 `100.x:8443` 주소가 보이게 | `05-private-access` 5.7절 |
 | `shot-ngrok-warning.png` | ngrok의 "You are about to visit …" 경고 화면 | `03-public-address` 3.3절 |
 
 ## 스크린샷을 커밋하기 전에

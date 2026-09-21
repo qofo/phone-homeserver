@@ -50,6 +50,8 @@ repository, and [`docs/04-always-on.md`](docs/04-always-on.md) explains each one
 Each service has its own supervisor that restarts it within ten seconds, survives a
 reboot, and keeps running after you close the terminal.
 
+![The blog, served from the phone over its permanent public address](docs/images/shot-blog-home.png)
+
 ## Requirements
 
 **Hardware**

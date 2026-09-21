@@ -43,6 +43,11 @@ Each run appends a line, and the log is rotated by hand at 512 KB:
 2026-09-20 21:15:02 KST pct=80 status=Charging temp=31.5 mA=-412 mV=4301
 ```
 
+The alert as it arrives, next to Termux's wake lock and Tailscale's connection — the
+three notifications that together mean the server is healthy:
+
+![The Termux:API notification asking for the charger to be unplugged at 80%](images/shot-battery-alert.jpg)
+
 That log is what makes power questions answerable: charge and discharge rate under
 real load, and how warm the phone runs at each.
 
@@ -77,6 +82,8 @@ temperature, uptime and load average. Two constraints shape how it is gathered:
   syscall through `ctypes` instead, and CPU percentage is derived on the Termux side.
 - **Battery data comes from Termux:API**, which means the metrics call depends on an
   Android app being alive. Treat a missing battery field as "unknown", never as zero.
+
+![The live dashboard: per-core usage, memory, swap, battery and temperature](images/shot-dashboard.png)
 
 The dashboard that consumes this is built only into the phone's copy of the site. A
 public visitor's browser should not be calling into your phone
