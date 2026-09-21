@@ -36,6 +36,9 @@ python3 docs/images/make_assets.py
 | `shot-dashboard.png` | 실시간 대시보드. 코어별 사용률, 메모리, 스왑, 배터리, 온도 | `06-operations` 6.3절 |
 | `shot-battery-alert.jpg` | 80% 충전기 분리 알림. Termux 웨이크 락, Tailscale 연결과 나란히 | `06-operations` 6.1절 |
 | `shot-jobs.jpg` | 등록된 작업 네 개가 모두 보이는 `termux-job-scheduler -p` 출력 | `04-always-on` 4.3절 |
+| `shot-ngrok-warning.png` | ngrok의 경고 페이지 | `03-public-address` 3.3절 |
+| `shot-tailscale-app.png` | 폰이 연결된 Tailscale 앱 — *마스킹함* | `05-private-access` 5.2절 |
+| `shot-docs-viewer.png` | 문서 뷰어의 목록 화면 — *마스킹함* | `05-private-access` 5.4절 |
 
 ## 아직 필요한 사진
 
@@ -54,10 +57,7 @@ README의 첫 이미지를 링크 미리보기로 쓴다.
 |:---|:---|:---|
 | `shot-termux-ubuntu.png` | `proot-distro login ubuntu` 직후의 Termux. `cat /etc/os-release` 출력이 화면에 있어야 한다. 빈 프롬프트는 아무것도 보여 주지 못한다 | `01-install` 1.4절 |
 | `shot-code-server.png` | 파일을 실제로 열고 터미널 패널에 출력이 있는 code-server. 로딩 중 화면이 아니라 | `05-private-access` 5.7절 |
-| `shot-tailscale-app.png` | 이 폰이 연결된 Tailscale 앱. **먼저 마스킹해야 한다** — 아래를 본다 | `05-private-access` 5.2절 |
-| `shot-docs-viewer.png` | 비공개 문서 뷰어. **먼저 마스킹해야 한다** — 아래를 본다 | `05-private-access` 5.4절 |
 | `shot-android-battery-opt.png` | Termux의 배터리 최적화가 **해제**된 안드로이드 설정 화면 | `01-install` 1.1절 |
-| `shot-ngrok-warning.png` | ngrok의 "You are about to visit …" 경고 화면 | `03-public-address` 3.3절 |
 
 ## 스크린샷을 커밋하기 전에
 
@@ -73,7 +73,12 @@ README의 첫 이미지를 링크 미리보기로 쓴다.
 - **안드로이드 상태 바** — 통신사 이름, 알림, 와이파이 SSID.
 - 브라우저 프로필에 뜨는 **구글·깃허브 계정 이름**.
 
-가능하면 흐리게 하는 대신 잘라 낸다. 약하게 준 블러는 복원될 수 있다.
+가능하면 흐리게 하는 대신 잘라 낸다. 약하게 준 블러는 복원될 수 있고, 모자이크 처리한
+글자도 마찬가지다. 되돌릴 수 없는 마스킹은 불투명한 막대뿐이다.
+
+여기 있는 이미지 중 셋을 그렇게 가린 뒤 커밋했다. ngrok 페이지에는 폰의 공인 IPv6 주소가,
+Tailscale 화면에는 계정 주소와 실명과 기기 세 대의 주소가, 뷰어 목록에는 공개하지 않은
+개인 프로젝트의 제목과 실제 tailnet 주소가 찍혀 있었다.
 
 ## 추가하는 방법
 

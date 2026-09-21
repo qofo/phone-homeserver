@@ -30,6 +30,8 @@ Install the **Tailscale app on Android**, not inside the container. The phone jo
 your tailnet as a host, and anything listening on the phone's `100.x.y.z` address is
 reachable from your other signed-in devices and from nowhere else.
 
+![The Tailscale app with the phone connected; the addresses are masked for publication](images/shot-tailscale-app.png)
+
 On a normal server you would listen on `0.0.0.0` and let a firewall allow only the VPN
 interface. That is not available here: `iptables` is not installed, and `proot`'s fake
 root cannot insert kernel firewall rules anyway. So the socket is bound to the
@@ -145,6 +147,8 @@ idea.md
 idea-plan.md
 HUGO_MIGRATION_PLAN.md
 ```
+
+![The viewer's index: every document it will serve, and nothing else](images/shot-docs-viewer.png)
 
 The filename in a request is used **as a key into that list**, never to build a path.
 No amount of encoding trickery escapes a lookup table. There are also name rules (ends

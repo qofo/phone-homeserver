@@ -133,6 +133,8 @@ $ curl -s -A "Mozilla/5.0 (Linux; Android 14) ... Chrome/140.0" ...
 200 2902         # "You are about to visit ..."  (ERR_NGROK_6024)
 ```
 
+![ngrok 경고 화면. 방문자는 사이트에 닿기 전에 한 번 눌러야 한다](images/shot-ngrok-warning.png)
+
 사람은 버튼을 한 번 더 누르고, `curl`과 RSS 리더와 API 호출은 영향을 받지 않는다.
 `ngrok-skip-browser-warning` 헤더를 보내면 건너뛸 수 있는데, 그것이 바로
 [`02-web-server.ko.md`](02-web-server.ko.md)에서 CORS preflight를 유발한 비표준

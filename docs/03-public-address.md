@@ -138,6 +138,8 @@ $ curl -s -A "Mozilla/5.0 (Linux; Android 14) ... Chrome/140.0" ...
 200 2902         # "You are about to visit ..."  (ERR_NGROK_6024)
 ```
 
+![ngrok's interstitial: the visitor has to click through once before reaching the site](images/shot-ngrok-warning.png)
+
 So a human clicks one extra button; `curl`, RSS readers and API calls are unaffected.
 Sending the `ngrok-skip-browser-warning` header skips it, which is exactly the
 non-standard header that triggers the CORS preflight described in

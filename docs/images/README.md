@@ -37,6 +37,9 @@ the file in this directory and adding the one-line snippet is all it takes.
 | `shot-dashboard.png` | the live dashboard: per-core usage, memory, swap, battery, temperature | `06-operations` §6.3 |
 | `shot-battery-alert.jpg` | the 80 % unplug notification, beside Termux's wake lock and Tailscale's connection | `06-operations` §6.1 |
 | `shot-jobs.jpg` | `termux-job-scheduler -p` listing all four persisted jobs | `04-always-on` §4.3 |
+| `shot-ngrok-warning.png` | ngrok's interstitial warning page | `03-public-address` §3.3 |
+| `shot-tailscale-app.png` | the Tailscale app with the phone connected — *redacted* | `05-private-access` §5.2 |
+| `shot-docs-viewer.png` | the document viewer's index — *redacted* | `05-private-access` §5.4 |
 
 ## Still wanted: photographs
 
@@ -55,10 +58,7 @@ GitHub uses the README's first image as the link preview when the repository is 
 |:---|:---|:---|
 | `shot-termux-ubuntu.png` | Termux right after `proot-distro login ubuntu`, with `cat /etc/os-release` output on screen. An empty prompt does not show anything | `01-install` §1.4 |
 | `shot-code-server.png` | code-server with a file actually open and the terminal panel showing output — not the loading skeleton | `05-private-access` §5.7 |
-| `shot-tailscale-app.png` | the Tailscale app with this phone connected. **Needs masking first** — see below | `05-private-access` §5.2 |
-| `shot-docs-viewer.png` | the private document viewer. **Needs masking first** — see below | `05-private-access` §5.4 |
 | `shot-android-battery-opt.png` | Android's battery settings with optimisation switched **off** for Termux | `01-install` §1.1 |
-| `shot-ngrok-warning.png` | ngrok's "You are about to visit …" interstitial | `03-public-address` §3.3 |
 
 ## Before you commit a screenshot
 
@@ -75,7 +75,13 @@ each image for:
 - **the Android status bar** — carrier name, notifications, Wi-Fi SSID.
 - **Google or GitHub account names** in a browser's profile chip.
 
-Crop rather than blur where you can; a blur that is too light can be undone.
+Crop rather than blur where you can; a blur that is too light can be undone, and so is
+pixelated text. Solid bars are the only redaction that cannot be reversed.
+
+Three of the images here were redacted that way before being committed: the ngrok page
+carried the phone's public IPv6 address, the Tailscale screen carried an account
+address, a real name and three device addresses, and the viewer's index carried the
+titles of an unreleased private project along with the real tailnet address.
 
 ## Adding one
 
