@@ -43,7 +43,7 @@ LOW=30       # 방전 중 이 값 이하면 꽂으라고 알린다
 알림이 도착한 모습이다. Termux의 웨이크 락, Tailscale의 연결 상태와 나란히 떠 있다. 이 세
 알림이 함께 보이면 서버가 정상이라는 뜻이다.
 
-![80%에서 충전기를 빼라고 알리는 Termux:API 알림](images/shot-battery-alert.jpg)
+![80%에서 충전기를 빼라고 알리는 Termux:API 알림](images/shot-battery-alert.png)
 
 이 로그가 전력에 관한 질문에 답할 수 있게 해 준다. 실제 부하에서의 충전·방전 속도와, 그때
 폰이 얼마나 뜨거운지다.

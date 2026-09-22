@@ -113,7 +113,7 @@ Termux가 메모리에 있든 없든 안드로이드가 15분마다 런처를 �
 
 안드로이드가 보고하는 네 개의 작업이다.
 
-![termux-job-scheduler -p 출력. 등록된 작업 네 개](images/shot-jobs.jpg)
+![termux-job-scheduler -p 출력. 등록된 작업 네 개](images/shot-jobs.png)
 
 서비스마다 런처와 작업 번호를 따로 둬서, 하나가 재시작해도 다른 것을 건드리지 않는다.
 

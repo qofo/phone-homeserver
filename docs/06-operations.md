@@ -46,7 +46,7 @@ Each run appends a line, and the log is rotated by hand at 512 KB:
 The alert as it arrives, next to Termux's wake lock and Tailscale's connection — the
 three notifications that together mean the server is healthy:
 
-![The Termux:API notification asking for the charger to be unplugged at 80%](images/shot-battery-alert.jpg)
+![The Termux:API notification asking for the charger to be unplugged at 80%](images/shot-battery-alert.png)
 
 That log is what makes power questions answerable: charge and discharge rate under
 real load, and how warm the phone runs at each.

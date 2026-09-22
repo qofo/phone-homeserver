@@ -35,8 +35,8 @@ the file in this directory and adding the one-line snippet is all it takes.
 |:---|:---|:---|
 | `shot-blog-home.png` | the blog over its permanent public address | README, "What you get" |
 | `shot-dashboard.png` | the live dashboard: per-core usage, memory, swap, battery, temperature | `06-operations` §6.3 |
-| `shot-battery-alert.jpg` | the 80 % unplug notification, beside Termux's wake lock and Tailscale's connection | `06-operations` §6.1 |
-| `shot-jobs.jpg` | `termux-job-scheduler -p` listing all four persisted jobs | `04-always-on` §4.3 |
+| `shot-battery-alert.png` | the 80 % unplug notification, beside Termux's wake lock and Tailscale's connection | `06-operations` §6.1 |
+| `shot-jobs.png` | `termux-job-scheduler -p` listing all four persisted jobs | `04-always-on` §4.3 |
 | `shot-ngrok-warning.png` | ngrok's interstitial warning page | `03-public-address` §3.3 |
 | `shot-tailscale-app.png` | the Tailscale app with the phone connected — *redacted* | `05-private-access` §5.2 |
 | `shot-docs-viewer.png` | the document viewer's index — *redacted* | `05-private-access` §5.4 |

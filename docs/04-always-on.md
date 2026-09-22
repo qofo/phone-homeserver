@@ -124,7 +124,7 @@ is the platform's floor for a periodic job — asking for less silently gets you
 
 All four jobs, as Android reports them:
 
-![termux-job-scheduler -p, listing the four persisted jobs](images/shot-jobs.jpg)
+![termux-job-scheduler -p, listing the four persisted jobs](images/shot-jobs.png)
 
 Each service has its own launcher and its own job ID, so one restarting cannot disturb
 another:

@@ -34,8 +34,8 @@ python3 docs/images/make_assets.py
 |:---|:---|:---|
 | `shot-blog-home.png` | 고정 공개 주소로 열린 블로그 | README, "무엇이 돌아가는가" |
 | `shot-dashboard.png` | 실시간 대시보드. 코어별 사용률, 메모리, 스왑, 배터리, 온도 | `06-operations` 6.3절 |
-| `shot-battery-alert.jpg` | 80% 충전기 분리 알림. Termux 웨이크 락, Tailscale 연결과 나란히 | `06-operations` 6.1절 |
-| `shot-jobs.jpg` | 등록된 작업 네 개가 모두 보이는 `termux-job-scheduler -p` 출력 | `04-always-on` 4.3절 |
+| `shot-battery-alert.png` | 80% 충전기 분리 알림. Termux 웨이크 락, Tailscale 연결과 나란히 | `06-operations` 6.1절 |
+| `shot-jobs.png` | 등록된 작업 네 개가 모두 보이는 `termux-job-scheduler -p` 출력 | `04-always-on` 4.3절 |
 | `shot-ngrok-warning.png` | ngrok의 경고 페이지 | `03-public-address` 3.3절 |
 | `shot-tailscale-app.png` | 폰이 연결된 Tailscale 앱 — *마스킹함* | `05-private-access` 5.2절 |
 | `shot-docs-viewer.png` | 문서 뷰어의 목록 화면 — *마스킹함* | `05-private-access` 5.4절 |
