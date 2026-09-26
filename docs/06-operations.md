@@ -36,6 +36,11 @@ Two implementation details that cost time to find:
 - **Add hysteresis.** A battery resting at exactly 80 % otherwise notifies every
   fifteen minutes forever. The state only returns to normal five points away from the
   threshold.
+- **The low alert vibrates as well.** Android's own notification buzz is easy to
+  sleep through and Do Not Disturb silences it, so the low branch also calls
+  `termux-vibrate -d 600 -f` three times; `-f` vibrates even in silent mode. A flat
+  battery takes the server down with it, while a full one only shortens its life, so
+  only the low end is worth waking up for.
 
 Each run appends a line, and the log is rotated by hand at 512 KB:
 

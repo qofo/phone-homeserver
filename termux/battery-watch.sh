@@ -20,6 +20,19 @@ NOTIFY_ID=battery
 
 read_node() { cat "$SYS/$1" 2>/dev/null; }
 
+# The low alert is the one that matters: a flat battery takes the server down with it.
+# Android's own notification buzz is easy to sleep through and Do Not Disturb silences
+# it, so buzz explicitly as well. -f vibrates even in silent mode; three pulses tell
+# the two alerts apart without looking at the screen.
+vibrate() {
+    left=$1
+    while [ "$left" -gt 0 ]; do
+        termux-vibrate -d 600 -f >/dev/null 2>&1
+        left=$((left - 1))
+        if [ "$left" -gt 0 ]; then sleep 1; fi
+    done
+}
+
 pct=$(read_node capacity)
 status=$(read_node status)
 case "$pct" in ''|*[!0-9]*) exit 0 ;; esac   # no reading, nothing to do
@@ -65,6 +78,7 @@ case "$state" in
         termux-notification --id "$NOTIFY_ID" --priority high \
             --title "🔋 충전기를 꽂으세요 ($pct%)" \
             --content "$LOW% 아래입니다. 방전되면 서버가 멈춥니다." >/dev/null 2>&1
+        vibrate 3
         ;;
     normal)
         termux-notification-remove "$NOTIFY_ID" >/dev/null 2>&1
