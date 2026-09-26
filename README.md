@@ -224,6 +224,7 @@ Paths are hard-coded to `/root`. To run this somewhere else, change:
 |:---|:---|
 | your ngrok domain | `NGROK_DOMAIN` in `start_services.sh`, `DEFAULT_PUBLIC_URL` in `measure_downtime.py` |
 | the blog source and build directory | `SRC` in `publish_blog.sh`, `BLOG_SITE_DIR` in `serve_blog.py` (also an environment variable) |
+| where logs go (`/root/logs/`) | `LOG_DIR` in `start_services.sh`, `LOG` in `private_docs.sh`, `code_server.sh` and `termux/battery-watch.sh`, `DOWNTIME_LOG` in `measure_downtime.py` |
 | which documents the viewer may serve | `cp private_docs.list.example private_docs.list`, then one path per line |
 | the docs viewer's bind address and port | `PRIVATE_DOCS_BIND`, `PRIVATE_DOCS_PORT`, `PRIVATE_DOCS_ALLOW`, `PRIVATE_DOCS_LIST`, `PRIVATE_DOCS_STATE` |
 | your MagicDNS name, for the TLS certificate | `MAGIC_DNS` in `code_server.sh` (empty in this copy on purpose) |

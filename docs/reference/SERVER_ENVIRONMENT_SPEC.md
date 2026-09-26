@@ -1,8 +1,8 @@
 # [서버 환경 상세 명세서 & 에이전트 인수인계 가이드]
 # Server Environment Specification & Agent Handoff Guide
 
-> **최종 갱신일**: 2026년 9월 19일  
-> **문서 버전**: v2.4.0 (Tailscale 전용 code-server 추가)  
+> **최종 갱신일**: 2026년 9월 25일  
+> **문서 버전**: v2.5.0 (`/root` 정리: 문서는 `docs/`, 로그는 `logs/`)  
 > **대상**: 이 환경에서 작업할 모든 후속 AI 에이전트 (Claude Code, Antigravity CLI 등)  
 > **핵심 키워드**: `Samsung Galaxy Note FE`, `Termux`, `PRoot-Distro`, `Ubuntu 26.04 LTS`, `aarch64`, `No-Systemd`, `Tailscale`, `ngrok`, `Supervisor`
 
@@ -81,7 +81,7 @@
    - Ubuntu 쪽은 패키지 약 90개의 최소 설치입니다. `git`은 2026-09-17에 apt로 설치했습니다.
 6. **시간대가 다름**
    - Ubuntu 쪽은 **UTC**, Termux(안드로이드) 쪽은 **KST(UTC+9)**입니다.
-   - `/root/daemon.log`는 UTC로, Termux의 `~/boot_services.log`는 KST로 기록됩니다.
+   - `/root/logs/daemon.log`는 UTC로, Termux의 `~/boot_services.log`는 KST로 기록됩니다.
 7. **`ptrace` 오버헤드**
    - 파일 I/O와 `fork`/`exec`가 네이티브보다 1.5~3배 느립니다. `npm install`처럼 작은 파일이 많은 작업은 특히 느립니다.
 8. **Android Doze & 프로세스 수명**
@@ -108,7 +108,7 @@
 ### 🗄️ 폐기된 방식: Cloudflare Tunnel
 * 처음에는 Cloudflare 임시 터널(`*.trycloudflare.com`)을 썼지만, 주소가 매번 바뀌어 ngrok으로 전환했습니다.
 * 토큰 방식 원격 터널(ID는 생략)이 **ngrok 도메인(`blog.daringly-marrow-penny.ngrok-free.dev`)으로 잘못 설정된 채** Cloudflare 대시보드에 남아 있을 수 있습니다. 소유하지 않은 도메인이라 동작하지 않습니다.
-* `/usr/local/bin/cloudflared` 바이너리와 `/root/cloudflared.log`가 남아 있지만 실행하지 않습니다.
+* `/usr/local/bin/cloudflared` 바이너리와 `/root/logs/cloudflared.log`가 남아 있지만 실행하지 않습니다.
 
 ---
 
@@ -154,10 +154,10 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/.start_services.pid`, `.start_services.lock` | 데몬 PID 파일과 단일 실행용 lock |
 | `/root/.services_disabled` | `stop` 시 생성. 있으면 어떤 경로로도 자동 시작하지 않음 |
 | `/root/.restart_requested` | `restart` 플래그 파일. 데몬이 감시 루프에서 확인 후 서비스 교체 |
-| `/root/downtime.log` | 서비스 비가용(다운타임) 시간 영구 누적 로그 |
+| `/root/logs/downtime.log` | 서비스 비가용(다운타임) 시간 영구 누적 로그 |
 | `/root/.downtime_start`, `.last_downtime`, `.service_heartbeat` | 다운타임 측정용 상태 파일 및 감시 데몬 하트비트 |
 | `/root/measure_downtime.py` | 재부팅/재시작 전후 서브세컨드(0.5초) 정밀 가용성 측정 프로브 도구 |
-| `/root/daemon.log` (UTC), `blog_server.log`, `ngrok.log` | 로그 (10MB 초과 시 `.1`로 순환) |
+| `/root/logs/daemon.log` (UTC), `blog_server.log`, `ngrok.log` | 로그 (10MB 초과 시 `.1`로 순환) |
 | Termux `~/boot_services.log` (KST) | 런처 실행 기록 |
 
 ### 관리 명령 (`/root/start_services.sh <명령>`)
@@ -195,14 +195,14 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/private_docs.list` | 공개할 문서 허용 목록 |
 | `/root/private_docs_static/` | 뷰어 JS/CSS, marked 18.0.13, DOMPurify 3.4.15 |
 | `/root/tests/test_private_docs.py` | 블랙박스 보안 테스트 47개 (`python3 /root/tests/test_private_docs.py`) |
-| `/root/termux/battery-watch.sh` | 배터리 감시(감시 작업 4247, 15분 주기). 충전 중 80% 이상이면 "빼세요", 방전 중 30% 이하면 "꽂으세요" 알림(Termux:API). 매 실행마다 `/root/battery_watch.log`에 잔량·상태·온도·전류·전압을 기록합니다 |
-| `/root/private_docs.log` (KST) | 서버·감시 데몬 로그 (2MB 초과 시 `.1`로 순환). 일반 열람은 기록하지 않고 거부(`[DENY]`)만 남깁니다. |
+| `/root/termux/battery-watch.sh` | 배터리 감시(감시 작업 4247, 15분 주기). 충전 중 80% 이상이면 "빼세요", 방전 중 30% 이하면 "꽂으세요" 알림(Termux:API). 매 실행마다 `/root/logs/battery_watch.log`에 잔량·상태·온도·전류·전압을 기록합니다 |
+| `/root/logs/private_docs.log` (KST) | 서버·감시 데몬 로그 (2MB 초과 시 `.1`로 순환). 일반 열람은 기록하지 않고 거부(`[DENY]`)만 남깁니다. |
 | `/root/.private_docs.state`, `.private_docs.pid`, `.private_docs.lock` | 서버 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
 | `/root/.private_docs_disabled`, `.private_docs_restart` | `stop` 시 생성되는 자동 시작 중지 플래그, `restart` 플래그 |
 
 
 ### code-server (브라우저용 VS Code, Tailscale 전용, 포트 8443)
-폰의 파일을 브라우저에서 VS Code로 편집하는 환경입니다. 사용 방법과 인증서 등록은 **`/root/CODE_SERVER_GUIDE.md`**(내부 문서 서버에도 있음)를 보십시오. 블로그·문서 서버와 **감시 데몬·런처·감시 작업을 모두 따로** 둡니다.
+폰의 파일을 브라우저에서 VS Code로 편집하는 환경입니다. 사용 방법과 인증서 등록은 **`/root/docs/CODE_SERVER_GUIDE.md`**(내부 문서 서버에도 있음)를 보십시오. 블로그·문서 서버와 **감시 데몬·런처·감시 작업을 모두 따로** 둡니다.
 
 * **왜 Remote-SSH가 아닌가**: VS Code Remote-SSH는 Termux의 sshd(8022)로 들어가는데, Termux는 bionic libc라 VS Code Server가 요구하는 glibc/libstdc++가 없습니다(`~/.vscode-server/.cli.*.log`: `does not meet Visual Studio Code Server's prerequisites`). code-server는 glibc가 있는 proot 우분투 안에서 돕니다.
 * **주소**: `https://<this-device>.<tailnet>.ts.net:8443/` 또는 `https://100.x.y.z:8443/` (Tailscale 전용, 비밀번호 로그인). 서버 인증서에 IP와 MagicDNS 이름이 모두 들어 있습니다.
@@ -225,7 +225,7 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/.config/code-server/config.yaml` | 비밀번호 등 설정. **내용을 출력하지 말 것** |
 | `/root/.config/code-server/tls/` | `ca.key`·`server.key`(600, 비밀), `ca.crt`(사용자 기기에 등록), `server.crt` |
 | `/root/.local/share/code-server/User/settings.json` | 캐시·설치 폴더를 파일 감시·검색에서 제외(아래 inotify 항목), 텔레메트리·자동 업데이트 끔 |
-| `/root/code_server.log` (KST + code-server 자체 로그) | 2MB 초과 시 `.1`로 순환 |
+| `/root/logs/code_server.log` (KST + code-server 자체 로그) | 2MB 초과 시 `.1`로 순환 |
 | `/root/.code_server.state`, `.code_server.pid`, `.code_server.lock` | 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
 | `/root/.code_server_disabled`, `.code_server_restart` | 자동 시작 중지 플래그, `restart` 플래그 |
 
@@ -278,11 +278,12 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 
 | 대상 | 방식 |
 |:---|:---|
-| `/root` | git 저장소. 허용 목록 `.gitignore`로 **서버 파일만 추적**하고, 자격 증명·캐시·에이전트 상태는 제외 |
+| `/root` | git 저장소. 허용 목록 `.gitignore`로 **서버 파일과 `docs/`의 운영 문서만 추적**하고, 자격 증명·캐시·에이전트 상태·로그·비공개 기획 문서는 제외 |
 | `/root/qofo.github.io` | 블로그 git 저장소. 원격 `github.com/qofo/qofo.github.io`(공개). `main` = 원본, `gh-pages` = Pages가 서비스하는 빌드 결과(Pages 소스: `gh-pages` 브랜치 루트) |
 | `/posts` | Hugo 전환 전의 글 저장소. 로컬 기록용이며 **원격을 붙이거나 push하지 않습니다**(옛 커밋에 개인 네트워크 정보가 있음) |
 | 2026-09-17 개편 전 원본 | `/root/backups/pre-improve-20260917.tar.gz` (Termux 쪽 훅 포함) |
 
+* **디렉터리 구성 (2026-09-25 정리)**: 서비스 코드는 `/root` 바로 아래에 둡니다(Termux 쪽 부팅 스크립트와 감시 작업이 이 경로를 직접 씁니다). 운영 문서는 `/root/docs/`, 로그는 `/root/logs/`, 가리기 전 원본 스크린샷은 `/root/screenshots/`에 있습니다.
 * 블로그 글은 GitHub(`qofo/qofo.github.io`)가 기기 밖 사본입니다. 서버 코드는 `qofo/phone-homeserver`에 마스킹한 사본을 둡니다.
 * ⚠️ 그 밖의 파일(로그, 자격 증명, 설정)은 **기기 밖 백업이 없습니다.** 필요하면 폰에서 `termux-setup-storage`를 실행해 저장소 권한을 허용하십시오.
 * 현재 `/storage/emulated/0`은 권한 거부 상태라 `cp … /storage/emulated/0/Download/`는 실패합니다.
@@ -298,10 +299,10 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | **정밀 다운타임 측정 프로브** | `python3 /root/measure_downtime.py --once` |
 | **코드 수정 반영** | `/root/start_services.sh restart` |
 | **유지보수로 끄기 / 다시 켜기** | `/root/start_services.sh stop` / `start` |
-| **로그 확인** | `tail -f /root/daemon.log /root/ngrok.log` |
+| **로그 확인** | `tail -f /root/logs/daemon.log /root/logs/ngrok.log` |
 | **터널 공개 주소 확인** | `curl -s localhost:4040/api/tunnels` |
 | **감시 작업 확인** | `termux-job-scheduler --pending` (4241 = 블로그, 4243 = 내부 문서 서버, 4245 = code-server, 4247 = 배터리 알림, 모두 15분 주기) |
-| **배터리 기록 보기** | `tail /root/battery_watch.log` (잔량·전류·전압. 방전 구간의 `mA`×`mV`가 실제 소비 전력입니다) |
+| **배터리 기록 보기** | `tail /root/logs/battery_watch.log` (잔량·전류·전압. 방전 구간의 `mA`×`mV`가 실제 소비 전력입니다) |
 | **code-server 상태** | `/root/code_server.sh status` (주소: `https://100.x.y.z:8443/`, Tailscale 전용, 안내: `CODE_SERVER_GUIDE.md`) |
 | **내부 문서 서버 상태** | `/root/private_docs.sh status` (주소: `http://100.x.y.z:8081/`, Tailscale 전용) |
 | **내부 문서 추가/제외** | `/root/private_docs.list`에 파일 경로를 한 줄 추가/삭제 (재시작 불필요) |

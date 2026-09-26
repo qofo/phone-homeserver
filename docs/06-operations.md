@@ -168,7 +168,8 @@ touch /root/.code_server_disabled     # code-server
 rm /root/.services_disabled && ./start_services.sh start
 ```
 
-**Logs.** Each supervisor rotates its own log (10 MB for the blog, 2 MB for the
+**Logs.** Everything logs to `/root/logs/`, which the supervisors create if it is
+missing, and each supervisor rotates its own log (10 MB for the blog, 2 MB for the
 private services, 512 KB for the battery watch). Nothing else grows unattended, but
 `/root/blog_builds/` accumulates one directory per publish — prune it occasionally:
 
@@ -190,7 +191,7 @@ publish state:
 
 ```bash
 ./start_services.sh status && ./private_docs.sh status && ./code_server.sh status
-tail -3 /root/battery_watch.log
+tail -3 /root/logs/battery_watch.log
 ./publish_blog.sh status
 ```
 

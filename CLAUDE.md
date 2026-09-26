@@ -50,7 +50,7 @@ anything invented here. Keep it that way.
 ## `docs/reference/` is a one-way copy
 
 Those four documents are the server's own working notes, **Korean only**, copied
-from `/root/*.md` with private addresses replaced by examples. Filenames map one to
+from `/root/docs/*.md` with private addresses replaced by examples. Filenames map one to
 one onto the originals, which is why they were not renamed to `.ko.md`.
 
 Copies flow **from the phone into this repository, never back**. Editing a copy here

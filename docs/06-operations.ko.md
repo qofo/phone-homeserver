@@ -159,8 +159,8 @@ touch /root/.code_server_disabled     # code-server
 rm /root/.services_disabled && ./start_services.sh start
 ```
 
-**로그.** 감독자는 각자 로그를 회전시킨다(블로그 10MB, 비공개 서비스 2MB, 배터리 감시
-512KB). 방치해서 자라는 것은 없지만, `/root/blog_builds/`는 배포마다 디렉터리가 하나씩
+**로그.** 로그는 모두 `/root/logs/`에 쌓인다. 폴더가 없으면 감독자가 만든다. 감독자는
+각자 로그를 회전시킨다(블로그 10MB, 비공개 서비스 2MB, 배터리 감시 512KB). 방치해서 자라는 것은 없지만, `/root/blog_builds/`는 배포마다 디렉터리가 하나씩
 쌓이므로 가끔 정리한다.
 
 ```bash
@@ -180,7 +180,7 @@ ls -1dt /root/blog_builds/* | tail -n +6 | xargs rm -rf
 
 ```bash
 ./start_services.sh status && ./private_docs.sh status && ./code_server.sh status
-tail -3 /root/battery_watch.log
+tail -3 /root/logs/battery_watch.log
 ./publish_blog.sh status
 ```
 

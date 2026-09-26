@@ -219,6 +219,7 @@ README는 서버를 띄우는 경로만 담는다. 나머지는 아래에 있고
 |:---|:---|
 | 내 ngrok 도메인 | `start_services.sh`의 `NGROK_DOMAIN`, `measure_downtime.py`의 `DEFAULT_PUBLIC_URL` |
 | 블로그 원본과 빌드 위치 | `publish_blog.sh`의 `SRC`, `serve_blog.py`의 `BLOG_SITE_DIR`(환경변수로도 바꿀 수 있다) |
+| 로그 위치 (`/root/logs/`) | `start_services.sh`의 `LOG_DIR`, `private_docs.sh`·`code_server.sh`·`termux/battery-watch.sh`의 `LOG`, `measure_downtime.py`의 `DOWNTIME_LOG` |
 | 뷰어가 보여 줄 문서 | `cp private_docs.list.example private_docs.list` 후 한 줄에 한 경로 |
 | 문서 뷰어의 바인딩과 포트 | `PRIVATE_DOCS_BIND`, `PRIVATE_DOCS_PORT`, `PRIVATE_DOCS_ALLOW`, `PRIVATE_DOCS_LIST`, `PRIVATE_DOCS_STATE` |
 | TLS 인증서에 넣을 MagicDNS 이름 | `code_server.sh`의 `MAGIC_DNS` (이 사본에서는 일부러 비워 뒀다) |

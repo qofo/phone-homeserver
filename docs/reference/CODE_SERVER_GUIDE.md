@@ -138,7 +138,7 @@ DNS 리바인딩(남의 웹페이지가 내 브라우저를 통해 tailnet 주�
 | 상태 | `/root/code_server.sh status` |
 | 재시작 | `/root/code_server.sh restart` |
 | 끄기 (메모리가 필요할 때) / 다시 켜기 | `/root/code_server.sh stop` / `start` |
-| 로그 | `tail -f /root/code_server.log` |
+| 로그 | `tail -f /root/logs/code_server.log` |
 
 - 감시 데몬은 블로그(`start_services.sh`), 문서 서버(`private_docs.sh`)와 **완전히 따로** 돕니다. 감시 작업은 4245(15분 주기), 기동 요청은 4246입니다.
 - 부팅 때 Termux:Boot(`~/.termux/boot/start-server.sh`)가 런처 `termux/ensure-code-server.sh`를 실행합니다.

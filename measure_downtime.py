@@ -30,7 +30,7 @@ from datetime import datetime
 
 DEFAULT_PUBLIC_URL = "https://daringly-marrow-penny.ngrok-free.dev"
 DEFAULT_LOCAL_URL = "http://127.0.0.1:8080"
-DOWNTIME_LOG = "/root/downtime.log"
+DOWNTIME_LOG = "/root/logs/downtime.log"
 
 def check_endpoint(url, timeout=2.0):
     """

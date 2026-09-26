@@ -18,7 +18,7 @@ PID_FILE="/root/.private_docs.pid"
 LOCK_FILE="/root/.private_docs.lock"
 DISABLED_FLAG="/root/.private_docs_disabled"
 RESTART_FLAG="/root/.private_docs_restart"
-LOG="/root/private_docs.log"
+LOG="/root/logs/private_docs.log"
 LOG_MAX_BYTES=$((2 * 1024 * 1024))
 CHECK_INTERVAL=10
 
@@ -207,6 +207,7 @@ start_daemon() {
     # Write-then-rename so the launcher never reads a half-written PID file
     echo "$$" > "$PID_FILE.tmp" && mv -f "$PID_FILE.tmp" "$PID_FILE"
     rm -f "$RESTART_FLAG"
+    mkdir -p "${LOG%/*}"   # the server logs here; a missing directory would stop every spawn
     log "[DAEMON] Supervisor started (pid $$)"
 
     trap 'log "[DAEMON] Supervisor stopping"; stop_child; exit 0' TERM INT HUP

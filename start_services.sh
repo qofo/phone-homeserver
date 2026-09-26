@@ -10,12 +10,12 @@
 # ==============================================================================
 
 NGROK_DOMAIN="https://daringly-marrow-penny.ngrok-free.dev"
-LOG_DIR="/root"
+LOG_DIR="/root/logs"
 PID_FILE="/root/.start_services.pid"
 LOCK_FILE="/root/.start_services.lock"
 DISABLED_FLAG="/root/.services_disabled"
 RESTART_FLAG="/root/.restart_requested"
-DOWNTIME_LOG="/root/downtime.log"
+DOWNTIME_LOG="$LOG_DIR/downtime.log"
 DOWNTIME_START_FILE="/root/.downtime_start"
 HEARTBEAT_FILE="/root/.service_heartbeat"
 LAST_DOWNTIME_FILE="/root/.last_downtime"
@@ -270,6 +270,7 @@ start_daemon() {
     # Write-then-rename so the launcher never reads a half-written PID file
     echo "$$" > "$PID_FILE.tmp" && mv -f "$PID_FILE.tmp" "$PID_FILE"
     rm -f "$RESTART_FLAG"
+    mkdir -p "$LOG_DIR"   # both children log here; a missing directory would stop every spawn
     log "[DAEMON] Supervisor started (pid $$)"
 
     trap 'RESTART_REQUESTED=1' USR1

@@ -11,7 +11,7 @@
 PREFIX=/data/data/com.termux/files/usr
 ROOTFS=$PREFIX/var/lib/proot-distro/containers/ubuntu/rootfs
 SYS=/sys/class/power_supply/battery
-LOG=$ROOTFS/root/battery_watch.log
+LOG=$ROOTFS/root/logs/battery_watch.log
 STATE=$ROOTFS/root/.battery_watch.state
 LOG_MAX=524288
 HIGH=80      # ask to unplug at or above this while charging
@@ -42,6 +42,7 @@ mA=$(read_node current_now)
 mV=$(read_node voltage_now)
 [ -n "$temp" ] && temp=$(awk "BEGIN {printf \"%.1f\", $temp/10}")
 [ -n "$mV" ] && mV=$((mV / 1000))
+mkdir -p "${LOG%/*}"
 echo "$(TZ=KST-9 date '+%Y-%m-%d %H:%M:%S %Z') pct=$pct status=$status temp=${temp:-?} mA=${mA:-?} mV=${mV:-?}" >> "$LOG"
 
 # Rotate the log by hand; it is the only thing here that grows

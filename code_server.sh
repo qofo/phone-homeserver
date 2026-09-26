@@ -35,7 +35,7 @@ PID_FILE="/root/.code_server.pid"
 LOCK_FILE="/root/.code_server.lock"
 DISABLED_FLAG="/root/.code_server_disabled"
 RESTART_FLAG="/root/.code_server_restart"
-LOG="/root/code_server.log"
+LOG="/root/logs/code_server.log"
 LOG_MAX_BYTES=$((2 * 1024 * 1024))
 CHECK_INTERVAL=15
 # code-server needs well over 30 seconds to come up on this phone
@@ -299,6 +299,7 @@ start_daemon() {
     # Write-then-rename so the launcher never reads a half-written PID file
     echo "$$" > "$PID_FILE.tmp" && mv -f "$PID_FILE.tmp" "$PID_FILE"
     rm -f "$RESTART_FLAG"
+    mkdir -p "${LOG%/*}"   # code-server logs here; a missing directory would stop every spawn
     log "[DAEMON] Supervisor started (pid $$)"
 
     trap 'log "[DAEMON] Supervisor stopping"; stop_child; exit 0' TERM INT HUP
