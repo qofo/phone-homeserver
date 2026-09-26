@@ -54,6 +54,41 @@ hugo_build() {
     BUILT_POSTS=$built
 }
 
+# The phone copy answers to more than one name: the ngrok domain, and inside the tailnet the
+# phone's IP or MagicDNS name. Hugo writes every link absolute against the phone config's
+# baseURL (the ngrok domain), so a page opened over Tailscale sent each click back out through
+# ngrok. Rewrite the navigation root-relative so it stays on whichever host served the page:
+# href attributes, the redirect pages Hugo writes for aliases, and the search index. Metadata
+# (og:url, JSON-LD, RSS, sitemap) keeps the absolute address. baseURL "/" is not an option:
+# PaperMod's breadcrumb JSON-LD assumes an absolute home URL and breaks the minified build.
+relativize_links() {
+    local out=$1 base
+    base=$(sed -n 's/^baseURL *= *"\(.*\)"$/\1/p' "$SRC/config/phone/hugo.toml")
+    [ -n "$base" ] || { say "[phone] no baseURL in $SRC/config/phone/hugo.toml; links left as built"; return; }
+    OUT="$out" BASE="$base" python3 - <<'PYEOF'
+import os, re
+out, base = os.environ["OUT"], re.escape(os.environ["BASE"].rstrip("/") + "/")
+# href="…" or, minified, href=…; and the alias pages' <meta http-equiv=refresh content="0; url=…">
+html = re.compile(r'(href=["\']?|content=["\']?0; ?url=)' + base)
+search = re.compile(r'("permalink":")' + base)
+made = left = 0
+for dp, _, fns in os.walk(out):
+    for fn in fns:
+        if not (fn.endswith(".html") or fn == "index.json"):
+            continue
+        p = os.path.join(dp, fn)
+        with open(p, encoding="utf-8") as f:
+            s = f.read()
+        s, n = (html if fn.endswith(".html") else search).subn(r"\1/", s)
+        if n:
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(s)
+            made += n
+        left += len(re.findall(r'href=["\']?' + base, s))
+print(f"[phone] {made} links made host-relative" + (f"; [warn] {left} still absolute" if left else ""))
+PYEOF
+}
+
 build_phone() {
     local stamp out rev
     stamp=$(date -u +%Y%m%d-%H%M%S)
@@ -62,6 +97,7 @@ build_phone() {
     mkdir -p "$BUILDS"
 
     hugo_build "$out" --environment phone
+    relativize_links "$out"
     printf 'commit=%s\nbuilt=%s\nposts=%s\n' "$rev" "$(date -u '+%F %T UTC')" "$BUILT_POSTS" > "$out/.build-info"
 
     # Atomic switch: make a new symlink, then rename it over the old one
