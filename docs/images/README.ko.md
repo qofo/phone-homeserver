@@ -40,17 +40,6 @@ python3 docs/images/make_assets.py
 | `shot-tailscale-app.png` | 폰이 연결된 Tailscale 앱 — *마스킹함* | `05-private-access` 5.2절 |
 | `shot-docs-viewer.png` | 문서 뷰어의 목록 화면 — *마스킹함* | `05-private-access` 5.4절 |
 
-## 아직 필요한 사진
-
-신경 써서 찍을 가치가 있는 것은 첫 번째 하나다. 전제가 사실임을 보여 주는 유일한 이미지다.
-이 저장소의 나머지는 빌린 VPS에서 돌려도 똑같아 보인다. 그리고 GitHub은 저장소가 공유될 때
-README의 첫 이미지를 링크 미리보기로 쓴다.
-
-| 파일명 | 담을 내용 | 들어갈 곳 |
-|:---|:---|:---|
-| `photo-phone-server.jpg` | 일하고 있는 폰. 충전기를 꽂고, 세워 두고, 화면에는 대시보드나 Termux 세션. 가로로, 정면에서 | README, 제목 아래 |
-| `photo-case-off.jpg` | *선택* — 뒷판을 벗긴 폰. 발열 대책 그 자체다 | `06-operations` 6.2절 |
-
 ## 아직 필요한 스크린샷
 
 | 파일명 | 담을 내용 | 들어갈 곳 |
@@ -86,14 +75,14 @@ Tailscale 화면에는 계정 주소와 실명과 기기 세 대의 주소가, �
 `.ko.md` 문서에도 한국어 설명으로 같은 줄을 넣는다.
 
 ```markdown
-![충전기를 꽂고 서비스 중인 폰](docs/images/photo-phone-server.jpg)   <!-- README.md에서 -->
-![충전기를 꽂고 서비스 중인 폰](images/photo-phone-server.jpg)        <!-- docs/ 문서에서 -->
+![파일을 연 code-server](images/shot-code-server.png)   <!-- docs/ 문서에서 -->
+![파일을 연 code-server](docs/images/shot-code-server.png)   <!-- README.md에서 -->
 ```
 
-사진은 400KB, 스크린샷은 250KB 아래로 유지한다. 이 저장소는 사이트를 서비스하는 그 폰에도
-복제된다. 긴 변을 1600px로 줄이면 보통 충분하다.
+스크린샷은 250KB 아래로 유지한다. 이 저장소는 사이트를 서비스하는 그 폰에도 복제된다.
+긴 변을 1600px 이하로 줄이면 보통 충분하다.
 
 ```bash
 # ImageMagick이 있는 기계에서
-magick photo.jpg -resize 1600x -quality 82 photo-phone-server.jpg
+magick screenshot.png -resize '1600x1600>' shot-code-server.png
 ```

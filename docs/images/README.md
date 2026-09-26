@@ -41,17 +41,6 @@ the file in this directory and adding the one-line snippet is all it takes.
 | `shot-tailscale-app.png` | the Tailscale app with the phone connected — *redacted* | `05-private-access` §5.2 |
 | `shot-docs-viewer.png` | the document viewer's index — *redacted* | `05-private-access` §5.4 |
 
-## Still wanted: photographs
-
-Only the first is worth making a point of. It is the one image that shows the premise
-is real — everything else in this repository would look the same on a rented VPS — and
-GitHub uses the README's first image as the link preview when the repository is shared.
-
-| Filename | What it should show | Goes in |
-|:---|:---|:---|
-| `photo-phone-server.jpg` | the phone doing the job: plugged in, propped up, screen on the dashboard or a Termux session. Landscape, taken straight on | README, under the title |
-| `photo-case-off.jpg` | *optional* — the phone with its back cover removed, which is the cooling fix | `06-operations` §6.2 |
-
 ## Still wanted: screenshots
 
 | Filename | What it should show | Goes in |
@@ -90,15 +79,14 @@ place named in the "Goes in" column — and the same line, with the Korean capti
 the `.ko.md` page beside it:
 
 ```markdown
-![The phone, plugged in and serving](docs/images/photo-phone-server.jpg)   <!-- from README.md -->
-![The phone, plugged in and serving](images/photo-phone-server.jpg)        <!-- from a docs/ page -->
+![code-server with a file open](images/shot-code-server.png)   <!-- from a docs/ page -->
+![code-server with a file open](docs/images/shot-code-server.png)   <!-- from README.md -->
 ```
 
-Keep photographs under about 400 KB and screenshots under about 250 KB — this
-repository is cloned onto the phone that serves it. Resizing to 1600 px on the long
-edge is usually enough:
+Keep screenshots under about 250 KB — this repository is cloned onto the phone that
+serves it. Capping the long edge at 1600 px is usually enough:
 
 ```bash
 # on a machine that has ImageMagick
-magick photo.jpg -resize 1600x -quality 82 photo-phone-server.jpg
+magick screenshot.png -resize '1600x1600>' shot-code-server.png
 ```
