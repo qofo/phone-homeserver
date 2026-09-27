@@ -107,13 +107,15 @@ What the plug taught, measured against a P100 (hardware 2.0, firmware 1.2.5):
 - **It drops packets.** From the phone, 60 pings lost 1 % to the router and 15 % to the
   plug, at a signal of −52 dBm. Any single request can hang, so
   [`tapo_plug.py`](../tapo_plug.py) sends only what matters — the two KLAP handshakes
-  and one query — with a 12-second timeout and up to four attempts. Eight status reads
-  in a row all succeeded, in 0.1 to 39 seconds. python-kasa's usual
-  `Device.connect()` asks for every component first, and failed every time.
-- **Do not reuse connections.** The plug closes kept-alive connections without telling
-  the client, and the next request on one never returns.
-- **Keep cookies from a bare IP address.** aiohttp's default cookie jar drops them, and
-  without the session cookie the plug answers the second handshake with 400.
+  and one query — with a 12-second timeout and up to four attempts. python-kasa's usual
+  `Device.connect()` asks for every component first; with it, three status reads in
+  five succeeded. With only the three requests, eight in eight did, in 0.1 to 13 seconds.
+- **Leave python-kasa its own HTTP session.** A session of your own needs a cookie jar
+  that keeps cookies from a bare IP address; aiohttp's default jar drops them, and
+  without the session cookie the plug answers the second handshake with 400. Reused
+  connections were suspected at first and turned out not to be the problem: with the
+  cookie handled, kept-alive connections passed the second handshake 6 times in 8 and
+  fresh ones 4 in 8.
 - **Trust the phone, not the plug.** Replies still go missing after the switch has
   happened, so the watch checks that the phone's own `status` turned `Discharging` or
   `Charging` within 30 seconds. Only when it did not does it fall back to the

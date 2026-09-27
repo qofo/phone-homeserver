@@ -211,11 +211,11 @@ A battery resting exactly on the threshold. Add hysteresis: return to the normal
 only once the reading has moved a few points past the threshold.
 
 **The Tapo plug times out, or answers the second handshake with 400**
-Timeouts: the plug loses packets (15 % here, against 1 % to the router). Retry with
-fresh connections instead of raising the timeout, and judge the result by the phone's
-charging status. A 400 on handshake 2 means the session cookie did not go back:
-aiohttp ignores cookies from an IP address unless its cookie jar is created with
-`unsafe=True`. If `tapo_plug.py status` never succeeds, check the account in
+Timeouts: the plug loses packets (15 % here, against 1 % to the router). Send as few
+requests as possible, retry the whole exchange instead of raising the timeout, and
+judge the result by the phone's charging status. A 400 on handshake 2 means the
+session cookie did not go back: if you hand python-kasa your own aiohttp session, its
+cookie jar must be created with `unsafe=True`, or it ignores cookies from an IP address. If `tapo_plug.py status` never succeeds, check the account in
 `/root/.config/tapo/credentials` and Third-Party Compatibility in the Tapo app.
 
 **`nproc` says 5 on an eight-core phone; load average never changes**
