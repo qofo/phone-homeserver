@@ -18,14 +18,17 @@ Android 9 has no charge limit, so a phone left plugged in sits at 100 % around t
 clock. On a 2017 battery that means swelling within a year or two — and a swollen
 battery in a device you leave unattended is a real hazard, not a performance note.
 
-The only lever available without root is a notification. `termux/battery-watch.sh`
-runs every fifteen minutes on the Termux side (job 4247, because notifications go
-through Termux:API) and reads sysfs directly:
+Without root there are two levers: a smart plug that switches the charger, and a
+notification that asks you to. `termux/battery-watch.sh` runs every fifteen minutes on
+the Termux side (job 4247, because notifications go through Termux:API), reads sysfs
+directly, and uses the plug when one is set up
+([below](#a-smart-plug-instead-of-a-notification)):
 
 ```sh
 SYS=/sys/class/power_supply/battery
-HIGH=80      # ask to unplug at or above this, while charging
-LOW=30       # ask to plug in at or below this, while on battery
+HIGH=80      # switch the charger off (or ask to unplug) at or above this while charging
+PLUG_ON=40   # switch the charger on at or below this while on battery
+LOW=30       # ask to plug in at or below this while on battery: the plug has not helped
 ```
 
 Two implementation details that cost time to find:
@@ -55,6 +58,73 @@ three notifications that together mean the server is healthy:
 
 That log is what makes power questions answerable: charge and discharge rate under
 real load, and how warm the phone runs at each.
+
+### A smart plug instead of a notification
+
+A notification needs someone awake. On 2026-09-26 the phone was left on battery
+overnight; the first reading at or below 30 % came at 03:28, the battery read 0 % at
+09:45, and the server was down for an hour and 46 minutes. The log also shows why a
+lower threshold would not have helped: on battery at night, Android's Doze stretched
+the fifteen-minute job to gaps of 1 h 54 min to 3 h 8 min, while the battery fell
+about 5 % an hour (36 % at 01:56, 15 % at 05:56).
+
+So the charger now hangs off a TP-Link **Tapo P100**, and the watch switches it: off at
+80 % while charging, on at 40 % on battery. Forty rather than thirty leaves room for a
+check that arrives two hours late.
+
+Setup, once:
+
+1. In the Tapo app, put the plug on the 2.4 GHz Wi-Fi and turn on **Tapo Lab →
+   Third-Party Compatibility** — newer firmware refuses local control without it. Add a
+   daily evening **"on" schedule** as a backstop, so the phone still charges overnight if
+   the automation ever stops.
+2. Reserve the plug's address in the router. Optional: the tool finds the plug again by
+   broadcast if it moves.
+3. Install [python-kasa](https://github.com/python-kasa/python-kasa) in a venv of
+   Ubuntu's `python3`. Termux's `python3` is built against Android's libc, so the
+   manylinux wheels python-kasa needs do not install there.
+
+   ```bash
+   apt-get install -y python3 python3-venv
+   python3 -m venv /root/.local/share/tapo-venv
+   /root/.local/share/tapo-venv/bin/pip install python-kasa==0.10.2
+   ```
+
+4. Put the Tapo account on the phone, outside every repository and readable only by
+   you, and check that the plug answers:
+
+   ```bash
+   mkdir -p /root/.config/tapo
+   nano /root/.config/tapo/credentials      # line 1: e-mail, line 2: password
+   chmod 600 /root/.config/tapo/credentials
+   echo 192.168.0.42 > /root/.config/tapo/host
+   /root/tapo_plug.py status                 # on | off
+   ```
+
+What the plug taught, measured against a P100 (hardware 2.0, firmware 1.2.5):
+
+- **It drops packets.** From the phone, 60 pings lost 1 % to the router and 15 % to the
+  plug, at a signal of −52 dBm. Any single request can hang, so
+  [`tapo_plug.py`](../tapo_plug.py) sends only what matters — the two KLAP handshakes
+  and one query — with a 12-second timeout and up to four attempts. Eight status reads
+  in a row all succeeded, in 0.1 to 39 seconds. python-kasa's usual
+  `Device.connect()` asks for every component first, and failed every time.
+- **Do not reuse connections.** The plug closes kept-alive connections without telling
+  the client, and the next request on one never returns.
+- **Keep cookies from a bare IP address.** aiohttp's default cookie jar drops them, and
+  without the session cookie the plug answers the second handshake with 400.
+- **Trust the phone, not the plug.** Replies still go missing after the switch has
+  happened, so the watch checks that the phone's own `status` turned `Discharging` or
+  `Charging` within 30 seconds. Only when it did not does it fall back to the
+  notifications above. The first automatic switch, with the plug's reply lost on the
+  way:
+
+  ```
+  2026-09-27 15:10:48 KST plug off: phone now Discharging (plug said: error: no answer from the plug at 192.168.0.42 (KasaException))
+  ```
+
+A lock keeps two runs from switching the plug at once; the job has been seen starting
+twice in the same second.
 
 ## 6.2 Heat
 

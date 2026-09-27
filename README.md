@@ -71,6 +71,7 @@ reboot, and keeps running after you close the terminal.
 | **Termux:API** | [F-Droid](https://f-droid.org/en/packages/com.termux.api/) | battery, temperature and notifications |
 | **Tailscale** | [Play Store](https://play.google.com/store/apps/details?id=com.tailscale.ipn) | the private network for `:8081` and `:8443` |
 | **ngrok account** | [ngrok.com](https://ngrok.com) (free) | one permanent public HTTPS address |
+| **Tapo app** *(optional)* | [Play Store](https://play.google.com/store/apps/details?id=com.tplink.iot) | sets up a Tapo P100 smart plug for the charger, which keeps the battery between 40 % and 80 % ([6.1](docs/06-operations.md#a-smart-plug-instead-of-a-notification)) |
 
 Install all three Termux apps from F-Droid in one go. Mixing F-Droid and Play Store
 builds of Termux breaks the add-ons, because Android refuses to let apps with
@@ -175,12 +176,13 @@ python3 tests/test_serve_blog.py
 ├── private_docs.sh            supervisor for the docs viewer
 ├── private_docs.list.example  the allow-list of files it may serve
 ├── code_server.sh             supervisor for code-server, plus its CA and TLS  :8443
+├── tapo_plug.py               switches the charger's smart plug (Tapo P100)
 ├── private_docs_static/       marked + DOMPurify + the viewer's CSS and JS
 ├── termux/                    launchers that must run outside proot
 │   ├── ensure-daemon.sh         blog and ngrok
 │   ├── ensure-private-docs.sh   docs viewer
 │   ├── ensure-code-server.sh    code-server
-│   ├── battery-watch.sh         charge alerts and a battery log
+│   ├── battery-watch.sh         keeps the battery at 40–80 % with the plug, and logs it
 │   └── claude-session.sh        a tmux session that outlives the SSH connection
 ├── tests/
 │   ├── test_serve_blog.py       35 black-box tests
@@ -229,6 +231,7 @@ Paths are hard-coded to `/root`. To run this somewhere else, change:
 | the docs viewer's bind address and port | `PRIVATE_DOCS_BIND`, `PRIVATE_DOCS_PORT`, `PRIVATE_DOCS_ALLOW`, `PRIVATE_DOCS_LIST`, `PRIVATE_DOCS_STATE` |
 | your MagicDNS name, for the TLS certificate | `MAGIC_DNS` in `code_server.sh` (empty in this copy on purpose) |
 | the job IDs, if 4241–4246 are taken | `LAUNCH_JOB_ID` in each supervisor |
+| the charger's smart plug | the Tapo account in `/root/.config/tapo/credentials`, its address in `host` next to it; thresholds `HIGH`, `PLUG_ON`, `LOW` in `termux/battery-watch.sh` ([6.1](docs/06-operations.md#a-smart-plug-instead-of-a-notification)) |
 
 Your ngrok token belongs in `~/.config/ngrok/ngrok.yml`, never in the repository.
 

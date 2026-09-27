@@ -59,7 +59,7 @@ and expecting `/root` to pick it up silently loses the change.
 ## Code files mirror `/root`
 
 `serve_blog.py`, `publish_blog.sh`, `start_services.sh`, `private_docs.sh`,
-`private_docs_server.py`, `measure_downtime.py`, `termux/` and `tests/` must match
+`private_docs_server.py`, `measure_downtime.py`, `tapo_plug.py`, `termux/` and `tests/` must match
 the running files in `/root`. Fix `/root` first, then copy here.
 
 **One deliberate exception:** `code_server.sh` keeps `MAGIC_DNS=""` in this copy.

@@ -69,6 +69,7 @@
 | **Termux:API** | [F-Droid](https://f-droid.org/en/packages/com.termux.api/) | 배터리·온도 조회와 알림 |
 | **Tailscale** | [플레이스토어](https://play.google.com/store/apps/details?id=com.tailscale.ipn) | `:8081`과 `:8443`을 위한 사설망 |
 | **ngrok 계정** | [ngrok.com](https://ngrok.com) (무료) | 바뀌지 않는 공개 HTTPS 주소 하나 |
+| **Tapo 앱** *(선택)* | [플레이스토어](https://play.google.com/store/apps/details?id=com.tplink.iot) | 충전기용 Tapo P100 스마트 플러그 설정. 배터리를 40~80%에 둔다([6.1](docs/06-operations.ko.md#알림-대신-스마트-플러그)) |
 
 Termux 계열 세 앱은 반드시 F-Droid에서 한꺼번에 받는다. F-Droid 빌드와 플레이스토어
 빌드를 섞으면 부가 앱이 동작하지 않는다. 안드로이드는 서명 키가 다른 앱끼리 대화하는
@@ -171,12 +172,13 @@ python3 tests/test_serve_blog.py
 ├── private_docs.sh            문서 뷰어의 감독자
 ├── private_docs.list.example  뷰어가 보여 줄 파일의 허용 목록 예시
 ├── code_server.sh             code-server 감독자, CA·TLS 발급 포함    :8443
+├── tapo_plug.py               충전기 스마트 플러그(Tapo P100)를 켜고 끈다
 ├── private_docs_static/       marked, DOMPurify, 뷰어의 CSS와 JS
 ├── termux/                    proot 밖에서 돌아야 하는 런처들
 │   ├── ensure-daemon.sh         블로그와 ngrok
 │   ├── ensure-private-docs.sh   문서 뷰어
 │   ├── ensure-code-server.sh    code-server
-│   ├── battery-watch.sh         충전 알림과 배터리 기록
+│   ├── battery-watch.sh         플러그로 배터리를 40~80%에 두고 기록한다
 │   └── claude-session.sh        SSH 연결보다 오래 사는 tmux 세션
 ├── tests/
 │   ├── test_serve_blog.py       블랙박스 테스트 35개
@@ -224,6 +226,7 @@ README는 서버를 띄우는 경로만 담는다. 나머지는 아래에 있고
 | 문서 뷰어의 바인딩과 포트 | `PRIVATE_DOCS_BIND`, `PRIVATE_DOCS_PORT`, `PRIVATE_DOCS_ALLOW`, `PRIVATE_DOCS_LIST`, `PRIVATE_DOCS_STATE` |
 | TLS 인증서에 넣을 MagicDNS 이름 | `code_server.sh`의 `MAGIC_DNS` (이 사본에서는 일부러 비워 뒀다) |
 | 4241–4246이 이미 쓰이는 경우의 작업 번호 | 각 감독자의 `LAUNCH_JOB_ID` |
+| 충전기 스마트 플러그 | Tapo 계정은 `/root/.config/tapo/credentials`, 주소는 같은 곳의 `host`. 기준값은 `termux/battery-watch.sh`의 `HIGH`, `PLUG_ON`, `LOW` ([6.1](docs/06-operations.ko.md#알림-대신-스마트-플러그)) |
 
 ngrok 토큰은 `~/.config/ngrok/ngrok.yml`에 둔다. 저장소에는 절대 넣지 않는다.
 

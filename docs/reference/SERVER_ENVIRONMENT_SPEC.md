@@ -195,7 +195,8 @@ start_services.sh start ────────┘      PID 파일로 실행 �
 | `/root/private_docs.list` | 공개할 문서 허용 목록 |
 | `/root/private_docs_static/` | 뷰어 JS/CSS, marked 18.0.13, DOMPurify 3.4.15 |
 | `/root/tests/test_private_docs.py` | 블랙박스 보안 테스트 47개 (`python3 /root/tests/test_private_docs.py`) |
-| `/root/termux/battery-watch.sh` | 배터리 감시(감시 작업 4247, 15분 주기). 충전 중 80% 이상이면 "빼세요", 방전 중 30% 이하면 "꽂으세요" 알림(Termux:API). 매 실행마다 `/root/logs/battery_watch.log`에 잔량·상태·온도·전류·전압을 기록합니다 |
+| `/root/termux/battery-watch.sh` | 배터리 관리(감시 작업 4247, 15분 주기). 충전기가 **Tapo P100 스마트 플러그**에 물려 있어서, 충전 중 80% 이상이면 플러그를 끄고 방전 중 40% 이하면 켭니다(2026-09-27부터). 성공 여부는 플러그의 응답이 아니라 **폰의 충전 상태**로 판단합니다. 플러그로 바꾸지 못했을 때만 예전 알림(80% "빼세요", 30% "꽂으세요"+진동)을 보냅니다. 매 실행마다 `/root/logs/battery_watch.log`에 잔량·상태·온도·전류·전압과 플러그 조작 결과를 기록합니다 |
+| `/root/tapo_plug.py` | 플러그 제어(`status`/`on`/`off`). python-kasa 0.10.2(`/root/.local/share/tapo-venv`, 우분투 python3 venv)로 KLAP 통신. 계정은 `/root/.config/tapo/credentials`(600, **출력 금지**), 주소는 `/root/.config/tapo/host`. 플러그가 패킷을 약 15% 잃어서 짧은 타임아웃과 재시도를 쓰고, 연결을 재사용하지 않습니다 |
 | `/root/logs/private_docs.log` (KST) | 서버·감시 데몬 로그 (2MB 초과 시 `.1`로 순환). 일반 열람은 기록하지 않고 거부(`[DENY]`)만 남깁니다. |
 | `/root/.private_docs.state`, `.private_docs.pid`, `.private_docs.lock` | 서버 상태(`listening`/`waiting`/`offline`), 감시 데몬 PID, lock |
 | `/root/.private_docs_disabled`, `.private_docs_restart` | `stop` 시 생성되는 자동 시작 중지 플래그, `restart` 플래그 |
