@@ -81,8 +81,9 @@ Setup, once:
 2. Reserve the plug's address in the router. Optional: the tool finds the plug again by
    broadcast if it moves.
 3. Install [python-kasa](https://github.com/python-kasa/python-kasa) in a venv of
-   Ubuntu's `python3`. Termux's `python3` is built against Android's libc, so the
-   manylinux wheels python-kasa needs do not install there.
+   Ubuntu's `python3`. Termux's `python3` reports the platform `android-24-arm64_v8a`,
+   and `cryptography`, which python-kasa needs, publishes no wheel for it (`aiohttp`
+   does), so pip would have to compile it with Rust on the phone.
 
    ```bash
    apt-get install -y python3 python3-venv

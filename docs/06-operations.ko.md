@@ -75,8 +75,9 @@ LOW=30       # 방전 중 이 값 이하면 꽂으라고 알린다: 플러그가
 2. 공유기에서 플러그의 주소를 고정한다. 선택 사항이다. 플러그가 다른 주소로 옮겨 가면
    도구가 브로드캐스트로 다시 찾는다.
 3. [python-kasa](https://github.com/python-kasa/python-kasa)를 우분투 `python3`의 venv에
-   설치한다. Termux의 `python3`는 안드로이드 libc용이라 python-kasa가 쓰는 manylinux
-   휠이 설치되지 않는다.
+   설치한다. Termux의 `python3`는 플랫폼이 `android-24-arm64_v8a`인데, python-kasa가
+   쓰는 `cryptography`는 이 플랫폼용 휠을 내지 않는다(`aiohttp`는 낸다). 그러면 pip가
+   폰에서 Rust로 직접 컴파일해야 한다.
 
    ```bash
    apt-get install -y python3 python3-venv
