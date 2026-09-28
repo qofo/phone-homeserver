@@ -79,12 +79,21 @@ async def exchange(host, creds, request):
         await protocol.close()
 
 
+class Refused(Exception):
+    """The plug answered and said no: local control is switched off on its side."""
+
+
 async def with_retries(host, creds, request):
     last = None
     for _ in range(TRIES):
         try:
             return await asyncio.wait_for(exchange(host, creds, request), TIMEOUT * 3 + 5)
         except Exception as e:  # timeouts and transport errors alike: start a new session
+            # A 403 to handshake1 is an answer, not a loss, and retrying does not change it.
+            # Seen on 2026-09-28 after working the night before; the known cure is to turn
+            # Third-Party Compatibility off and on again in the Tapo app.
+            if "403" in str(e):
+                raise Refused(str(e)) from e
             last = e
     raise last
 
@@ -115,6 +124,9 @@ async def run(command):
         tried.append(host)
         try:
             result = await with_retries(host, creds, request)
+        except Refused:
+            fail("the plug refused local control (403 to handshake1): in the Tapo app, turn "
+                 "Third-Party Compatibility off, wait ten seconds, and turn it on again")
         except Exception as e:
             last = e
             continue
@@ -132,8 +144,8 @@ async def run(command):
         if command != "status" and state != command:
             fail(f"asked for {command}, the plug reports {state}")
         return state
-    fail(f"no answer from the plug at {', '.join(tried) or 'an unknown address'}"
-         f" ({type(last).__name__ if tried else 'not found on the network'})")
+    reason = f"{type(last).__name__}: {str(last)[:120]}" if tried else "not found on the network"
+    fail(f"no answer from the plug at {', '.join(tried) or 'an unknown address'} ({reason})")
 
 
 def main():

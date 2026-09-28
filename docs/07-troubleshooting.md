@@ -210,13 +210,15 @@ them back together.
 A battery resting exactly on the threshold. Add hysteresis: return to the normal state
 only once the reading has moved a few points past the threshold.
 
-**The Tapo plug times out, or answers the second handshake with 400**
+**The Tapo plug times out, or answers a handshake with 400 or 403**
 Timeouts: the plug loses packets (15 % here, against 1 % to the router). Send as few
 requests as possible, retry the whole exchange instead of raising the timeout, and
 judge the result by the phone's charging status. A 400 on handshake 2 means the
 session cookie did not go back: if you hand python-kasa your own aiohttp session, its
-cookie jar must be created with `unsafe=True`, or it ignores cookies from an IP address. If `tapo_plug.py status` never succeeds, check the account in
-`/root/.config/tapo/credentials` and Third-Party Compatibility in the Tapo app.
+cookie jar must be created with `unsafe=True`, or it ignores cookies from an IP address. A 403 on handshake 1 means the plug refuses local control altogether; turning
+Third-Party Compatibility off and on again in the Tapo app ended it here, with the
+firmware unchanged. Otherwise, if `tapo_plug.py status` never succeeds, check the
+account in `/root/.config/tapo/credentials`.
 
 **`nproc` says 5 on an eight-core phone; load average never changes**
 Android hot-unplugs idle cores, so the visible count moves. The static load average is

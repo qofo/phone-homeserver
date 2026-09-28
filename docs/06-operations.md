@@ -19,13 +19,14 @@ clock. On a 2017 battery that means swelling within a year or two — and a swol
 battery in a device you leave unattended is a real hazard, not a performance note.
 
 Without root there are two levers: a smart plug that switches the charger, and a
-notification that asks you to. `termux/battery-watch.sh` runs every fifteen minutes on
-the Termux side (job 4247, because notifications go through Termux:API), reads sysfs
-directly, and uses the plug when one is set up
-([below](#a-smart-plug-instead-of-a-notification)):
+notification that asks you to. `termux/battery-watch.sh` runs on the Termux side
+(because notifications go through Termux:API) as a loop that reads sysfs every five
+minutes; job 4247 and the boot script only restart the loop if it has died. It uses the
+plug when one is set up ([below](#a-smart-plug-instead-of-a-notification)):
 
 ```sh
 SYS=/sys/class/power_supply/battery
+INTERVAL=300 # seconds between readings in the loop
 HIGH=80      # switch the charger off (or ask to unplug) at or above this while charging
 PLUG_ON=40   # switch the charger on at or below this while on battery
 LOW=30       # ask to plug in at or below this while on battery: the plug has not helped
@@ -77,7 +78,8 @@ Setup, once:
 1. In the Tapo app, put the plug on the 2.4 GHz Wi-Fi and turn on **Tapo Lab →
    Third-Party Compatibility** — newer firmware refuses local control without it. Add a
    daily evening **"on" schedule** as a backstop, so the phone still charges overnight if
-   the automation ever stops.
+   the automation ever stops. If the plug later answers with 403, turn Third-Party
+   Compatibility off, wait ten seconds, and turn it on again.
 2. Reserve the plug's address in the router. Optional: the tool finds the plug again by
    broadcast if it moves.
 3. Install [python-kasa](https://github.com/python-kasa/python-kasa) in a venv of
@@ -128,6 +130,24 @@ What the plug taught, measured against a P100 (hardware 2.0, firmware 1.2.5):
 
 A lock keeps two runs from switching the plug at once; the job has been seen starting
 twice in the same second.
+
+The second day showed three more things:
+
+- **A fifteen-minute job is not a clock at night.** On battery, Doze held job 4247 back
+  from 06:35 to 12:03 (5 h 28 min); the battery went from 52 % to 25 % and the 40 %
+  switch-on never ran. The supervisors in the proot, which are long-running loops, did
+  not pause for even 20 seconds on the same nights — their heartbeat check writes a
+  downtime entry when they do, and there was none. So the reading now happens in a loop
+  every five minutes, and the job only restarts the loop.
+- **The plug can refuse.** For nine hours it answered the first handshake with 403 and
+  switched nothing, with the firmware unchanged. Turning Third-Party Compatibility off
+  and on again in the Tapo app ended it. `tapo_plug.py` now says so instead of retrying,
+  and the watch raises a notification with that cure at once — or after three misses in
+  a row, when the plug simply does not answer — and clears it when the plug answers again.
+- **Auto Off stays off.** The plug can switch itself off a set time after coming on,
+  which would cap charging even when the phone cannot. With one switch-on schedule a
+  day, a refusal like the one above would then leave the charger off and the phone flat,
+  and for a server that is worse than a few hours at 100 %.
 
 ## 6.2 Heat
 

@@ -8,15 +8,29 @@
 # Without the plug set up, or when switching it fails, it falls back to what it did
 # before: a notification asking the owner to unplug at 80% or plug in at 30%.
 #
-# Runs on the Termux side (job 4247, every 15 minutes) because notifications go through
-# the Termux:API app. Readings come from sysfs; the directory cannot be listed under
-# SELinux but the individual files are readable.
+# Runs on the Termux side because notifications go through the Termux:API app. Readings
+# come from sysfs; the directory cannot be listed under SELinux but the individual files
+# are readable.
+#
+#   battery-watch.sh         what job 4247 (every 15 minutes) and the boot script run:
+#                            start the loop if it is not running, then take a reading
+#   battery-watch.sh loop    take a reading every 5 minutes, forever (one instance)
+#   battery-watch.sh check   take one reading and act on it
+#   battery-watch.sh stop    stop the loop (job 4247 starts it again)
+#
+# Why a loop: on battery at night Android's Doze held job 4247 back for up to 5 h 28 min
+# (06:35 to 12:03 on 2026-09-28), and the 40% switch-on never ran; the battery was at 25%
+# by then. The supervisors in the proot, long-running loops like this one, never paused
+# for even 20 seconds on the same nights (their heartbeat check writes a downtime entry
+# when it does, and there is none), so the reading moved into a loop and the job only
+# restarts the loop if it has died.
 PREFIX=/data/data/com.termux/files/usr
 ROOTFS=$PREFIX/var/lib/proot-distro/containers/ubuntu/rootfs
 SYS=/sys/class/power_supply/battery
 LOG=$ROOTFS/root/logs/battery_watch.log
 STATE=$ROOTFS/root/.battery_watch.state
 LOG_MAX=524288
+INTERVAL=300 # seconds between readings in the loop
 HIGH=80      # switch the charger off (or ask to unplug) at or above this while charging
 PLUG_ON=40   # switch the charger on at or below this while on battery
 LOW=30       # ask to plug in at or below this while on battery: the plug has not helped
@@ -24,14 +38,47 @@ NOTIFY_ID=battery
 # The plug: set up only once the Tapo account is on the phone (see /root/tapo_plug.py)
 PLUG_TOOL=/root/tapo_plug.py
 PLUG_CREDENTIALS=$ROOTFS/root/.config/tapo/credentials
+PLUG_STATE=$ROOTFS/root/.battery_watch.plug   # failed switches in a row; absent when fine
+PLUG_NOTIFY_ID=battery-plug
 LOCK=$ROOTFS/root/.battery_watch.lock
+LOOP_PID=$ROOTFS/root/.battery_watch.pid
 
 read_node() { cat "$SYS/$1" 2>/dev/null; }
 stamp() { TZ=KST-9 date '+%Y-%m-%d %H:%M:%S %Z'; }
 
-# One run at a time: the job has been seen to start twice in the same second, and two
-# runs switching the plug at once would each log a result for the other. A lock older
-# than ten minutes belongs to a run that died.
+loop_running() {
+    pid=$(cat "$LOOP_PID" 2>/dev/null)
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && grep -q 'battery-watch' "/proc/$pid/cmdline" 2>/dev/null
+}
+
+case "${1:-}" in
+    loop)
+        loop_running && exit 0
+        # Two starters at once both get here; the last one to write the PID file stays
+        echo $$ > "$LOOP_PID"
+        sleep 1
+        [ "$(cat "$LOOP_PID" 2>/dev/null)" = "$$" ] || exit 0
+        while :; do
+            # A reading that hangs (proot, the plug) must not stop every later one
+            timeout 600 "$0" check
+            sleep "$INTERVAL"
+        done
+        ;;
+    stop)
+        pid=$(cat "$LOOP_PID" 2>/dev/null)
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null
+        rm -f "$LOOP_PID"
+        exit 0
+        ;;
+    check) ;;
+    *)
+        loop_running || setsid nohup "$0" loop </dev/null >/dev/null 2>&1 &
+        ;;
+esac
+
+# One run at a time: the job has been seen to start twice in the same second, the loop
+# and the job can meet, and two runs switching the plug at once would each log a result
+# for the other. A lock older than ten minutes belongs to a run that died.
 if ! mkdir "$LOCK" 2>/dev/null; then
     [ -n "$(find "$LOCK" -maxdepth 0 -mmin +10 2>/dev/null)" ] || exit 0
     rm -rf "$LOCK" && mkdir "$LOCK" 2>/dev/null || exit 0
@@ -49,6 +96,40 @@ vibrate() {
         left=$((left - 1))
         if [ "$left" -gt 0 ]; then sleep 1; fi
     done
+}
+
+# Tell the owner when the plug cannot be switched, with what to do about it. A refusal is
+# certain at once; silence may be one of the plug's lost packets, so it counts from the
+# third miss in a row. --alert-once: later updates of the same notification stay quiet.
+plug_alert() {
+    fails=$(cat "$PLUG_STATE" 2>/dev/null)
+    case "$fails" in ''|*[!0-9]*) fails=0 ;; esac
+    fails=$((fails + 1))
+    echo "$fails" > "$PLUG_STATE"
+    case "$want" in
+        off) effect="충전을 멈추지 못하고 있습니다" ;;
+        *) effect="충전을 시작하지 못하고 있습니다" ;;
+    esac
+    case "$1" in
+        *"refused local control"*)
+            title="🔌 플러그가 폰의 제어를 거부합니다 ($pct%)"
+            text="Tapo 앱 → 나 → 타사 서비스 → 타사 호환성을 껐다가 10초 뒤 다시 켜 주세요. 그동안 $effect."
+            ;;
+        *)
+            [ "$fails" -ge 3 ] || return 0
+            title="🔌 플러그가 응답하지 않습니다 ($pct%, ${fails}번 연속)"
+            text="플러그의 전원과 와이파이 연결을 확인해 주세요. 그동안 $effect."
+            ;;
+    esac
+    termux-notification --id "$PLUG_NOTIFY_ID" --priority high --alert-once \
+        --title "$title" --content "$text" >/dev/null 2>&1
+}
+
+plug_recovered() {
+    [ -e "$PLUG_STATE" ] || return 0
+    rm -f "$PLUG_STATE"
+    termux-notification-remove "$PLUG_NOTIFY_ID" >/dev/null 2>&1
+    echo "$(stamp) plug answers again" >> "$LOG"
 }
 
 pct=$(read_node capacity)
@@ -76,28 +157,37 @@ case "$status" in
     Charging|Full) [ "$pct" -ge "$HIGH" ] && want=off ;;
     *) [ "$pct" -le "$PLUG_ON" ] && want=on ;;
 esac
-if [ -n "$want" ] && [ -r "$PLUG_CREDENTIALS" ] && [ -x "$ROOTFS$PLUG_TOOL" ]; then
-    reply=$("$PREFIX/bin/proot-distro" login ubuntu -- "$PLUG_TOOL" "$want" 2>&1 | tail -n 1)
-    waited=0
-    now=$(read_node status)
-    while [ "$waited" -lt 30 ]; do
+if [ -r "$PLUG_CREDENTIALS" ] && [ -x "$ROOTFS$PLUG_TOOL" ]; then
+    if [ -n "$want" ]; then
+        reply=$("$PREFIX/bin/proot-distro" login ubuntu -- "$PLUG_TOOL" "$want" 2>&1 | tail -n 1)
+        waited=0
         now=$(read_node status)
-        case "$want:$now" in
-            off:Discharging|"off:Not charging"|on:Charging|on:Full) plug_ok=1; break ;;
-        esac
-        sleep 3
-        waited=$((waited + 3))
-    done
-    if [ "$plug_ok" = 1 ]; then
-        # The phone's own status is the proof; the plug's reply is only a note
-        echo "$(stamp) plug $want: phone now $now (plug said: $reply)" >> "$LOG"
-    else
-        echo "$(stamp) plug $want FAILED: $reply, phone still $now after ${waited}s" >> "$LOG"
+        while [ "$waited" -lt 30 ]; do
+            now=$(read_node status)
+            case "$want:$now" in
+                off:Discharging|"off:Not charging"|on:Charging|on:Full) plug_ok=1; break ;;
+            esac
+            sleep 3
+            waited=$((waited + 3))
+        done
+        if [ "$plug_ok" = 1 ]; then
+            # The phone's own status is the proof; the plug's reply is only a note
+            echo "$(stamp) plug $want: phone now $now (plug said: $reply)" >> "$LOG"
+            plug_recovered
+        else
+            echo "$(stamp) plug $want FAILED: $reply, phone still $now after ${waited}s" >> "$LOG"
+            plug_alert "$reply"
+        fi
+    elif [ -e "$PLUG_STATE" ]; then
+        # Nothing to switch, but the last switch failed: ask the plug whether it answers
+        # now, so a fixed setting clears the alert without waiting for the next switch
+        reply=$("$PREFIX/bin/proot-distro" login ubuntu -- "$PLUG_TOOL" status 2>&1 | tail -n 1)
+        case "$reply" in on|off) plug_recovered ;; esac
     fi
 fi
 
 # Hysteresis: come back to "normal" only after moving 5 points away from the threshold,
-# so a battery sitting at exactly 80% does not send an alert every 15 minutes.
+# so a battery sitting at exactly 80% does not send an alert at every reading.
 prev=$(cat "$STATE" 2>/dev/null)
 state=normal
 case "$status" in
