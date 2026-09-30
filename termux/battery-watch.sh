@@ -40,10 +40,25 @@ PLUG_TOOL=/root/tapo_plug.py
 PLUG_CREDENTIALS=$ROOTFS/root/.config/tapo/credentials
 PLUG_STATE=$ROOTFS/root/.battery_watch.plug   # failed switches in a row; absent when fine
 PLUG_NOTIFY_ID=battery-plug
+PLUG_HOST=$ROOTFS/root/.config/tapo/host      # the plug's saved LAN address
 LOCK=$ROOTFS/root/.battery_watch.lock
 LOOP_PID=$ROOTFS/root/.battery_watch.pid
 
 read_node() { cat "$SYS/$1" 2>/dev/null; }
+
+# How long the battery lasts at the fuel gauge's averaged current, as a sentence, or
+# nothing when charging or when the gauge gives no usable numbers. Only an estimate:
+# the drain on this phone ranges from 4%/h idle to 25%/h during a build (2026-09-29 log).
+eta_text() {
+    cc=$(read_node charge_counter)
+    ca=$(read_node current_avg)
+    case "$cc" in ''|*[!0-9]*) return 0 ;; esac
+    case "$ca" in -[0-9]*) ;; *) return 0 ;; esac
+    awk "BEGIN { h = ($cc / 1000) / (0 - $ca)
+        if (h <= 0 || h > 200) exit
+        if (h < 3) printf \"지금 쓰는 속도라면 약 %.1f시간 뒤 방전됩니다.\", h
+        else printf \"지금 쓰는 속도라면 약 %.0f시간 뒤 방전됩니다.\", h }"
+}
 stamp() { TZ=KST-9 date '+%Y-%m-%d %H:%M:%S %Z'; }
 
 loop_running() {
@@ -98,27 +113,45 @@ vibrate() {
     done
 }
 
-# Tell the owner when the plug cannot be switched, with what to do about it. A refusal is
-# certain at once; silence may be one of the plug's lost packets, so it counts from the
-# third miss in a row. --alert-once: later updates of the same notification stay quiet.
+# Tell the owner when the plug cannot be switched: which of the three failures it is,
+# what to do first, and what happens meanwhile. The three seen so far:
+#   refused (403)  the plug answers but has lost its third-party authorisation; the app's
+#                  Third-Party Compatibility toggle restores it (2026-09-28, 09-29 twice)
+#   unreachable    nothing answers at the saved address and discovery finds nothing, while
+#                  the app still works through the cloud (2026-09-29 21:10); unplugging
+#                  and replugging the plug brought it back, refusing (403) at first
+#   no reply       a timeout: often one of the plug's lost packets
+# A refusal is certain at once; the other two count from the third miss in a row.
+# --alert-once: later updates of the same notification stay quiet.
 plug_alert() {
     fails=$(cat "$PLUG_STATE" 2>/dev/null)
     case "$fails" in ''|*[!0-9]*) fails=0 ;; esac
     fails=$((fails + 1))
     echo "$fails" > "$PLUG_STATE"
     case "$want" in
-        off) effect="충전을 멈추지 못하고 있습니다" ;;
-        *) effect="충전을 시작하지 못하고 있습니다" ;;
+        off) effect="충전기가 켜진 채 100%까지 찹니다."; by_hand="끄세요"
+             plug_why="플러그를 끄지 못했습니다" ;;
+        *) effect="충전기가 꺼져 있습니다. $(eta_text)"; by_hand="켜세요"
+           plug_why="플러그를 켜지 못했습니다" ;;
     esac
+    host=$(cat "$PLUG_HOST" 2>/dev/null)
     case "$1" in
         *"refused local control"*)
+            plug_why="$plug_why(플러그가 거부)"
             title="🔌 플러그가 폰의 제어를 거부합니다 ($pct%)"
-            text="Tapo 앱 → 나 → 타사 서비스 → 타사 호환성을 껐다가 10초 뒤 다시 켜 주세요. 그동안 $effect."
+            text="타사 호환성 허가가 풀렸습니다. ① 급하면 Tapo 앱에서 플러그를 직접 $by_hand. ② Tapo 앱 → 나 → 타사 서비스 → 타사 호환성을 끄고 10초 뒤 다시 켜세요. 지금은 $effect"
+            ;;
+        *"Cannot connect"*|*"No route"*|*_ConnectionError*)
+            plug_why="$plug_why(플러그가 네트워크에서 안 보임)"
+            [ "$fails" -ge 3 ] || return 0
+            title="🔌 폰에서 플러그가 보이지 않습니다 ($pct%, ${fails}번 연속)"
+            text="앱은 인터넷을 거치므로 동작할 수 있습니다. ① 급하면 Tapo 앱에서 플러그를 직접 $by_hand. ② 앱의 기기 정보에서 IP가 ${host:-?}인지 확인하세요. 다르면 알려 주세요. ③ 같으면 플러그를 뽑았다가 다시 꽂으세요. 그 뒤 '거부' 알림이 오면 타사 호환성을 껐다 켜세요. 지금은 $effect"
             ;;
         *)
+            plug_why="$plug_why(플러그 응답 없음)"
             [ "$fails" -ge 3 ] || return 0
             title="🔌 플러그가 응답하지 않습니다 ($pct%, ${fails}번 연속)"
-            text="플러그의 전원과 와이파이 연결을 확인해 주세요. 그동안 $effect."
+            text="대답이 중간에 끊기고 있습니다. ① 급하면 Tapo 앱에서 플러그를 직접 $by_hand. ② 계속되면 플러그를 뽑았다가 다시 꽂으세요. 지금은 $effect"
             ;;
     esac
     termux-notification --id "$PLUG_NOTIFY_ID" --priority high --alert-once \
@@ -153,6 +186,7 @@ size=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
 # that the phone really stopped or started charging, since that is what matters.
 plug_ok=0
 want=
+plug_why=
 case "$status" in
     Charging|Full) [ "$pct" -ge "$HIGH" ] && want=off ;;
     *) [ "$pct" -le "$PLUG_ON" ] && want=on ;;
@@ -207,7 +241,7 @@ esac
 [ "$plug_ok" = 1 ] && state=normal
 # Say why the owner is being asked, when a plug is set up and did not manage it
 plug_note=
-[ -r "$PLUG_CREDENTIALS" ] && plug_note="스마트 플러그로 바꾸지 못했습니다. "
+[ -r "$PLUG_CREDENTIALS" ] && plug_note="${plug_why:-스마트 플러그로 바꾸지 못했습니다}. "
 
 [ "$state" = "$prev" ] && exit 0
 echo "$state" > "$STATE"
@@ -216,12 +250,12 @@ case "$state" in
     high)
         termux-notification --id "$NOTIFY_ID" --priority high \
             --title "🔌 충전기를 빼세요 ($pct%)" \
-            --content "${plug_note}만충 상태로 오래 두면 배터리가 부풀고 수명이 줄어듭니다." >/dev/null 2>&1
+            --content "${plug_note}만충 상태로 오래 두면 배터리가 부풀고 수명이 줄어듭니다. Tapo 앱에서 플러그를 끄거나 충전기를 빼세요." >/dev/null 2>&1
         ;;
     low)
         termux-notification --id "$NOTIFY_ID" --priority high \
             --title "🔋 충전기를 꽂으세요 ($pct%)" \
-            --content "$LOW% 아래입니다. ${plug_note}방전되면 서버가 멈춥니다." >/dev/null 2>&1
+            --content "$LOW% 아래입니다. ${plug_note}$(eta_text) 방전되면 서버가 멈춥니다. 급하면 Tapo 앱에서 플러그를 켜거나 충전기를 직접 꽂으세요." >/dev/null 2>&1
         vibrate 3
         ;;
     normal)

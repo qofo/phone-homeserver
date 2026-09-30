@@ -76,12 +76,15 @@ check that arrives two hours late.
 Setup, once:
 
 1. In the Tapo app, put the plug on the 2.4 GHz Wi-Fi and turn on **Tapo Lab →
-   Third-Party Compatibility** — newer firmware refuses local control without it. Add a
-   daily evening **"on" schedule** as a backstop, so the phone still charges overnight if
-   the automation ever stops. If the plug later answers with 403, turn Third-Party
-   Compatibility off, wait ten seconds, and turn it on again.
+   Third-Party Compatibility** — newer firmware refuses local control without it. Add
+   **switch-on and switch-off schedules** as a backstop — here 08:00–08:45, 15:00–15:45
+   and 22:00–22:45, worked out under *the third day* below — so the battery keeps moving
+   between about 40 % and 85 % even when the phone loses control of the plug. If the
+   plug later answers with 403, turn Third-Party Compatibility off, wait ten seconds, and
+   turn it on again.
 2. Reserve the plug's address in the router. Optional: the tool finds the plug again by
-   broadcast if it moves.
+   broadcast if it moves. Broadcast does not help when the plug stops answering on the
+   LAN altogether, which happened on the third day.
 3. Install [python-kasa](https://github.com/python-kasa/python-kasa) in a venv of
    Ubuntu's `python3`. Termux's `python3` reports the platform `android-24-arm64_v8a`,
    and `cryptography`, which python-kasa needs, publishes no wheel for it (`aiohttp`
@@ -147,7 +150,36 @@ The second day showed three more things:
 - **Auto Off stays off.** The plug can switch itself off a set time after coming on,
   which would cap charging even when the phone cannot. With one switch-on schedule a
   day, a refusal like the one above would then leave the charger off and the phone flat,
-  and for a server that is worse than a few hours at 100 %.
+  and for a server that is worse than a few hours at 100 %. (Since the third day there are
+  three switch-ons a day, each paired with a scheduled switch-off; the Auto Off timer
+  itself is still unused.)
+
+The third day added four more:
+
+- **Refusals come back.** From 07:15 the plug refused (403) all 55 attempts to switch it
+  on, until 12:16; the battery reached 13 %. The same toggle ended it. Two refusals in two
+  days, with the firmware unchanged, and the cause is still unknown.
+- **The plug can vanish from the LAN while the app still works.** At 21:10 the phone got
+  `Cannot connect to host` from the saved address, `No route to host` on a plain TCP
+  connect, and broadcast discovery found nothing, yet the Tapo app switched the plug
+  without trouble. The app goes through TP-Link's cloud and the plug kept that connection,
+  so only local traffic had stopped. Unplugging and replugging the plug brought it back
+  to the LAN — refusing with 403, so the toggle was needed once more.
+- **Notifications now say which failure it is.** A refusal (at once), an unreachable plug
+  and a lost reply (after three misses each) get different texts. Every one starts with
+  switching the plug by hand in the app, the unreachable one names the saved address to
+  compare with the app's device info, and when the charger could not be switched on it
+  adds the time to empty at the fuel gauge's averaged current
+  (`charge_counter / current_avg`).
+- **The backstop schedule comes from the log.** On battery the phone lost about 4 % an
+  hour when idle, 7–18 % while an agent was working on it and 20–25 % during a build; it
+  charged about 1 % a minute below 80 %. Three 45-minute windows a day (about +45 %
+  each) cover an idle or lightly used day on their own, with gaps of six to nine hours.
+  When the phone does have control it corrects the schedule within five minutes: off at
+  80 %, on at 40 %. The rules were added from the phone over the local API
+  (`add_schedule_rule`). Replies were lost several times, so after every send the tool
+  read the list back (`get_schedule_rules`) before sending again, and each rule went in
+  once.
 
 ## 6.2 Heat
 

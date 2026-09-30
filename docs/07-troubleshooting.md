@@ -217,8 +217,17 @@ judge the result by the phone's charging status. A 400 on handshake 2 means the
 session cookie did not go back: if you hand python-kasa your own aiohttp session, its
 cookie jar must be created with `unsafe=True`, or it ignores cookies from an IP address. A 403 on handshake 1 means the plug refuses local control altogether; turning
 Third-Party Compatibility off and on again in the Tapo app ended it here, with the
-firmware unchanged. Otherwise, if `tapo_plug.py status` never succeeds, check the
-account in `/root/.config/tapo/credentials`.
+firmware unchanged, twice in two days. The plug can also come back refusing after it has
+been unplugged and plugged in again. Otherwise, if `tapo_plug.py status` never succeeds,
+check the account in `/root/.config/tapo/credentials`.
+
+**The Tapo app switches the plug, but the phone cannot reach it**
+`Cannot connect to host` from `tapo_plug.py`, `No route to host` on a plain TCP connect,
+and broadcast discovery finds nothing. The app works through TP-Link's cloud, so the plug
+can be online there while it has stopped answering on the LAN. Compare the IP in the
+app's device info with `/root/.config/tapo/host`; if it moved, write the new one there
+(and reserve it in the router). If it is the same, unplug the plug and plug it in again,
+then expect a 403 and toggle Third-Party Compatibility as above.
 
 **`nproc` says 5 on an eight-core phone; load average never changes**
 Android hot-unplugs idle cores, so the visible count moves. The static load average is
